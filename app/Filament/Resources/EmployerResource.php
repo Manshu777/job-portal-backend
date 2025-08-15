@@ -13,7 +13,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;  
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\TextArea;
 
 class EmployerResource extends Resource
@@ -26,19 +26,19 @@ class EmployerResource extends Resource
     {
         return $form
             ->schema([
-                
-                
+
+
                 TextInput::make('name')
-                ->required()
-                ->maxLength(255)
-                ->disabled(),
-                
+                    ->required()
+                    ->maxLength(255)
+                    ->disabled(),
+
                 TextInput::make('contact_email')
-                ->email()
-                ->required()
-                ->maxLength(255)
-                ->disabled(),
-                
+                    ->email()
+                    ->required()
+                    ->maxLength(255)
+                    ->disabled(),
+
                 // TextInput::make('company_name')
                 //     ->required()
                 //     ->maxLength(255),
@@ -50,7 +50,7 @@ class EmployerResource extends Resource
                 // TextInput::make('contact_person')
                 //     ->required()
                 //     ->maxLength(255),
-                
+
                 // TextInput::make('contact_phone')
                 //     ->tel()
                 //     ->required()
@@ -88,14 +88,15 @@ class EmployerResource extends Resource
                 ToggleColumn::make('is_verified')
                     ->label('Verified')
                     ->sortable()
-                    ->onColor('success')
-                    ->offColor('danger'),
+                    ->onColor('danger')
+                    ->offColor('success'),
 
                 // ToggleColumn::make('is_blocked')
                 //     ->label('Blocked')
                 //     ->sortable()
                 //     ->onColor('danger')
                 //     ->offColor('success'),
+                
                 TextColumn::make('name')->label('Full Name')->sortable()->searchable(),
                 TextColumn::make('contact_email')->label('Email')->sortable()->searchable(),
                 TextColumn::make('companies.contact_phone')->label('Phone')->sortable()->searchable()->limit(19),

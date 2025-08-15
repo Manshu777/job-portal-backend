@@ -67,156 +67,202 @@ class EmployerAuthController extends Controller
      */
 
     public function verifyOtp(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'contact_email' => 'required|email',
-        'otp' => 'required|numeric|digits:6',
-    ]);
+    {
+        $validator = Validator::make($request->all(), [
+            'contact_email' => 'required|email',
+            'otp' => 'required|numeric|digits:6',
+        ]);
 
-    if ($validator->fails()) {
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $otpRecord = OtpVerification::where('email', $request->contact_email)
+            ->where('otp', $request->otp)
+            ->first();
+
+        if (!$otpRecord) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid OTP',
+            ], 400);
+        }
+
+        if (Carbon::now()->gt($otpRecord->expires_at)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'OTP has expired',
+            ], 400);
+        }
+
+        // Check if employer exists
+        $employer = Employer::where('contact_email', $request->contact_email)->first();
+        if (!$employer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No employer found with this email',
+            ], 300);
+        }
+
+        // Generate and store token
+        $token = $employer->createToken('EmployerToken')->plainTextToken;
+        $otpRecord->update([
+            'session_token' => $token,
+            'session_token_expires_at' => Carbon::now()->addMinutes(30),
+        ]);
+
         return response()->json([
-            'success' => false,
-            'errors' => $validator->errors(),
-        ], 422);
+            'success' => true,
+            'message' => 'OTP verified successfully',
+            'email' => $request->contact_email,
+            'session_token' => $token,
+        ]);
     }
 
-    $otpRecord = OtpVerification::where('email', $request->contact_email)
-        ->where('otp', $request->otp)
-        ->first();
 
-    if (!$otpRecord) {
+
+
+    public function addCompany(Request $request)
+    {
+        // Validate the request
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'company_location' => 'nullable|string|max:255',
+            'contact_person' => 'nullable|string|max:255',
+            'contact_phone' => 'nullable|string|max:20',
+            'gst_certificate' => 'nullable|file|mimes:pdf|max:2048',
+            'other_certificate' => 'nullable|file|mimes:pdf|max:2048',
+        ], [
+            'gst_certificate.mimes' => 'The GST certificate must be a PDF file.',
+            'other_certificate.mimes' => 'The other certificate must be a PDF file.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Get the authenticated employer
+        $employer = Auth::guard('employer-api')->user();
+
+        if (!$employer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 401);
+        }
+
+        // Handle file uploads with unique filenames
+        $gstCertificatePath = null;
+        $otherCertificatePath = null;
+
+        if ($request->hasFile('gst_certificate') && $request->file('gst_certificate')->isValid()) {
+            $filename = 'gst_' . time() . '_' . $request->file('gst_certificate')->getClientOriginalName();
+            $gstCertificatePath = $request->file('gst_certificate')->storeAs('documents', $filename, 'public');
+        }
+
+        if ($request->hasFile('other_certificate') && $request->file('other_certificate')->isValid()) {
+            $filename = 'other_' . time() . '_' . $request->file('other_certificate')->getClientOriginalName();
+            $otherCertificatePath = $request->file('other_certificate')->storeAs('documents', $filename, 'public');
+        }
+
+        // Create the company
+        $company = Company::create([
+            'employer_id' => $employer->id,
+            'name' => $request->name,
+            'company_location' => $request->company_location,
+            'contact_person' => $request->contact_person,
+            'contact_phone' => $request->contact_phone,
+            'gst_certificate' => $gstCertificatePath,
+            'other_certificate' => $otherCertificatePath,
+            'is_approved' => false, // Default to pending approval
+        ]);
+
+        // Notify admin about new company registration
+        try {
+            Mail::to('manshu.developer@gmail.com')->send(new NewCompanyRegistered($employer, $company));
+        } catch (\Exception $e) {
+            Log::error('Failed to send company registration email: ' . $e->getMessage());
+        }
+
         return response()->json([
-            'success' => false,
-            'message' => 'Invalid OTP',
-        ], 400);
+            'success' => true,
+            'message' => 'Company added successfully, awaiting admin approval',
+            'data' => $company,
+        ], 201);
     }
 
-    if (Carbon::now()->gt($otpRecord->expires_at)) {
+    public function update_docs(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id' => 'required|exists:companies,id',
+            'other_certificate' => 'nullable|file|mimes:pdf|max:2048',
+        ]);
+
+        if ($validator->fails())
+            return response()->json(['errors' => $validator->errors()], 422);
+        $company = Company::find($request->id);
+
+        if (!$company)
+            return response()->json(['success' => false, 'message' => 'Company not found.'], 404);
+
+        if ($request->hasFile('other_certificate') && $request->file('other_certificate')->isValid()) {
+            $company->other_certificate = $request->file('other_certificate')->storeAs('documents', 'other_' . time() . '_' . $request->file('other_certificate')->getClientOriginalName(), 'public');
+            $company->save();
+        }
+
+        return response()->json(['success' => true, 'message' => 'Certificate updated successfully', 'data' => $company], 200);
+    }
+
+
+
+    /**
+     * List all companies for the authenticated employer
+     */
+    public function listCompanies(Request $request)
+    {
+        $employer = Auth::guard('employer-api')->user();
+
+        if (!$employer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 401);
+        }
+
+        $companies = Company::where('employer_id', $employer->id)->get();
+
         return response()->json([
-            'success' => false,
-            'message' => 'OTP has expired',
-        ], 400);
+            'success' => true,
+            'message' => 'Companies retrieved successfully',
+            'data' => $companies,
+        ], 200);
     }
 
-    // Check if employer exists
-    $employer = Employer::where('contact_email', $request->contact_email)->first();
-    if (!$employer) {
+
+    public function getCompanies(Request $request)
+    {
+        // Optional: You can use pagination to limit the number of companies returned
+        $companies = Company::all(); // Get all companies (you can add pagination or filters if needed)
+
+        if ($companies->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No companies found.',
+            ], 404);
+        }
+
         return response()->json([
-            'success' => false,
-            'message' => 'No employer found with this email',
-        ], 300);
+            'success' => true,
+            'message' => 'Companies retrieved successfully.',
+            'data' => $companies,
+        ], 200);
     }
 
-    // Generate and store token
-    $token = $employer->createToken('EmployerToken')->plainTextToken;
-    $otpRecord->update([
-        'session_token' => $token,
-        'session_token_expires_at' => Carbon::now()->addMinutes(30),
-    ]);
 
-    return response()->json([
-        'success' => true,
-        'message' => 'OTP verified successfully',
-        'email' => $request->contact_email,
-        'session_token' => $token,
-    ]);
-}
-
-
-
-
-public function addCompany(Request $request)
-{
-    // Validate the request
-    $validator = Validator::make($request->all(), [
-        'name' => 'required|string|max:255',
-        'company_location' => 'nullable|string|max:255',
-        'contact_person' => 'nullable|string|max:255',
-        'contact_phone' => 'nullable|string|max:20',
-        'gst_certificate' => 'nullable|file|mimes:pdf|max:2048', // PDF, max 2MB
-        'other_certificate' => 'nullable|file|mimes:pdf|max:2048', // PDF, max 2MB
-    ], [
-        'gst_certificate.mimes' => 'The GST certificate must be a PDF file.',
-        'other_certificate.mimes' => 'The other certificate must be a PDF file.',
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json(['errors' => $validator->errors()], 422);
-    }
-
-    // Get the authenticated employer
-    $employer = Auth::guard('employer-api')->user();
-
-    if (!$employer) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Unauthorized',
-        ], 401);
-    }
-
-    // Handle file uploads with unique filenames
-    $gstCertificatePath = null;
-    $otherCertificatePath = null;
-
-    if ($request->hasFile('gst_certificate') && $request->file('gst_certificate')->isValid()) {
-        $filename = 'gst_' . time() . '_' . $request->file('gst_certificate')->getClientOriginalName();
-        $gstCertificatePath = $request->file('gst_certificate')->storeAs('documents', $filename, 'public');
-    }
-
-    if ($request->hasFile('other_certificate') && $request->file('other_certificate')->isValid()) {
-        $filename = 'other_' . time() . '_' . $request->file('other_certificate')->getClientOriginalName();
-        $otherCertificatePath = $request->file('other_certificate')->storeAs('documents', $filename, 'public');
-    }
-
-    // Create the company
-    $company = Company::create([
-        'employer_id' => $employer->id,
-        'name' => $request->name,
-        'company_location' => $request->company_location,
-        'contact_person' => $request->contact_person,
-        'contact_phone' => $request->contact_phone,
-        'gst_certificate' => $gstCertificatePath,
-        'other_certificate' => $otherCertificatePath,
-        'is_approved' => false, // Default to pending approval
-    ]);
-
-    // Notify admin about new company registration
-    try {
-        Mail::to('manshu.developer@gmail.com')->send(new NewCompanyRegistered($employer, $company));
-    } catch (\Exception $e) {
-        Log::error('Failed to send company registration email: ' . $e->getMessage());
-    }
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Company added successfully, awaiting admin approval',
-        'data' => $company,
-    ], 201);
-}
-     /**
-      * List all companies for the authenticated employer
-      */
-     public function listCompanies(Request $request)
-     {
-         $employer = Auth::guard('employer-api')->user();
- 
-         if (!$employer) {
-             return response()->json([
-                 'success' => false,
-                 'message' => 'Unauthorized',
-             ], 401);
-         }
- 
-         $companies = Company::where('employer_id', $employer->id)->get();
- 
-         return response()->json([
-             'success' => true,
-             'message' => 'Companies retrieved successfully',
-             'data' => $companies,
-         ], 200);
-     }
-
-       public function updateEmployer(Request $request)
+    public function updateEmployer(Request $request)
     {
         // Get the authenticated employer
         $employer = Auth::guard('employer-api')->user();
@@ -289,72 +335,72 @@ public function addCompany(Request $request)
         ], 200);
     }
 
- 
-     /**
-      * Admin approves or rejects a company
-      */
-     public function approveCompany(Request $request, $companyId)
-     {
-         // Validate the request
-         $validator = Validator::make($request->all(), [
-             'is_approved' => 'required|boolean',
-             'reason' => 'nullable|string|max:500', // Optional reason for rejection
-         ]);
- 
-         if ($validator->fails()) {
-             return response()->json(['errors' => $validator->errors()], 422);
-         }
- 
-         // Check if the user is an admin (assuming middleware or role-based check)
-         // For simplicity, assuming this is protected by an admin middleware
-         $company = Company::find($companyId);
- 
-         if (!$company) {
-             return response()->json([
-                 'success' => false,
-                 'message' => 'Company not found',
-             ], 404);
-         }
- 
-         // Update approval status
-         $company->update([
-             'is_approved' => $request->is_approved,
-             'approval_reason' => $request->reason,
-         ]);
- 
-         // Notify employer about approval/rejection (optional)
-         try {
-             $employer = $company->employer;
-             $status = $request->is_approved ? 'approved' : 'rejected';
-        
-         } catch (\Exception $e) {
-             // Log the error if needed
-         }
- 
-         return response()->json([
-             'success' => true,
-             'message' => "Company {$status} successfully",
-             'data' => $company,
-         ], 200);
-     }
- 
-     /**
-      * List all companies for admin (pending, approved, rejected)
-      */
-     public function listAllCompanies(Request $request)
-     {
-         // Assuming this is protected by admin middleware
-         $companies = Company::with('employer')->get();
- 
-         return response()->json([
-             'success' => true,
-             'message' => 'All companies retrieved successfully',
-             'data' => $companies,
-         ], 200);
-     }
+
+    /**
+     * Admin approves or rejects a company
+     */
+    public function approveCompany(Request $request, $companyId)
+    {
+        // Validate the request
+        $validator = Validator::make($request->all(), [
+            'is_approved' => 'required|boolean',
+            'reason' => 'nullable|string|max:500', // Optional reason for rejection
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Check if the user is an admin (assuming middleware or role-based check)
+        // For simplicity, assuming this is protected by an admin middleware
+        $company = Company::find($companyId);
+
+        if (!$company) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Company not found',
+            ], 404);
+        }
+
+        // Update approval status
+        $company->update([
+            'is_approved' => $request->is_approved,
+            'approval_reason' => $request->reason,
+        ]);
+
+        // Notify employer about approval/rejection (optional)
+        try {
+            $employer = $company->employer;
+            $status = $request->is_approved ? 'approved' : 'rejected';
+
+        } catch (\Exception $e) {
+            // Log the error if needed
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Company {$status} successfully",
+            'data' => $company,
+        ], 200);
+    }
+
+    /**
+     * List all companies for admin (pending, approved, rejected)
+     */
+    public function listAllCompanies(Request $request)
+    {
+        // Assuming this is protected by admin middleware
+        $companies = Company::with('employer')->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'All companies retrieved successfully',
+            'data' => $companies,
+        ], 200);
+    }
 
 
-      public function signup(Request $request)
+    public function signup(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'contact_email' => 'required|email|unique:employers,contact_email',
@@ -399,7 +445,7 @@ public function addCompany(Request $request)
             $reviewReason = 'Company name is unusually long and requires verification.';
         }
 
-     
+
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
@@ -437,7 +483,7 @@ public function addCompany(Request $request)
                 'gst_certificate' => $gstCertificatePath,
                 'other_certificate' => $companyPanCardPath,
                 'is_approved' => false,
-               
+
             ]);
 
             // Notify admin about new company registration
@@ -474,60 +520,60 @@ public function addCompany(Request $request)
     }
 
     public function login(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'contact_email' => 'required|email',
-        'password' => 'required|string',
-    ]);
+    {
+        $validator = Validator::make($request->all(), [
+            'contact_email' => 'required|email',
+            'password' => 'required|string',
+        ]);
 
-    if ($validator->fails()) {
-        return response()->json(['errors' => $validator->errors()], 422);
-    }
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
 
-    $employer = Employer::where('contact_email', $request->contact_email)->first();
+        $employer = Employer::where('contact_email', $request->contact_email)->first();
 
-    if (!$employer || !Hash::check($request->password, $employer->password)) {
+        if (!$employer || !Hash::check($request->password, $employer->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid email or password',
+            ], 401);
+        }
+
+        // Delete existing tokens to ensure single active session (optional)
+        $employer->tokens()->delete();
+
+        // Generate new token
+        $token = $employer->createToken('EmployerToken')->plainTextToken;
+
         return response()->json([
-            'success' => false,
-            'message' => 'Invalid email or password',
-        ], 401);
+            'success' => true,
+            'message' => 'Login successful',
+            'session_token' => $token,
+            'employer' => [
+                'id' => $employer->id,
+                'name' => $employer->name,
+                'contact_email' => $employer->contact_email,
+                'company_name' => $employer->company_name,
+            ],
+        ], 200);
     }
 
-    // Delete existing tokens to ensure single active session (optional)
-    $employer->tokens()->delete();
+    public function profile(Request $request)
+    {
+        // Retrieve the authenticated employer using the 'employer-api' guard
+        $employer = Auth::guard('employer-api')->user();
 
-    // Generate new token
-    $token = $employer->createToken('EmployerToken')->plainTextToken;
+        if (!$employer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 401);
+        }
 
-    return response()->json([
-        'success' => true,
-        'message' => 'Login successful',
-        'session_token' => $token,
-        'employer' => [
-            'id' => $employer->id,
-            'name' => $employer->name,
-            'contact_email' => $employer->contact_email,
-            'company_name' => $employer->company_name,
-        ],
-    ], 200);
-}
-
- public function profile(Request $request)
-{
-    // Retrieve the authenticated employer using the 'employer-api' guard
-    $employer = Auth::guard('employer-api')->user();
-
-    if (!$employer) {
         return response()->json([
-            'success' => false,
-            'message' => 'Unauthorized',
-        ], 401);
+            'success' => true,
+            'message' => 'Employer profile retrieved successfully',
+            'data' => $employer,
+        ], 200);
     }
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Employer profile retrieved successfully',
-        'data' => $employer,
-    ], 200);
-}
 }

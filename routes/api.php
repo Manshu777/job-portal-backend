@@ -52,6 +52,9 @@ Route::prefix('v1')->group(function () {
     Route::get('/job-titles', [JobPostController::class, 'getJobTitles']);
     Route::post('/add-companies', [EmployerAuthController::class, 'addCompany']);
     Route::get('/companies', [EmployerAuthController::class, 'listCompanies']);
+    Route::get('/getall/companies', [EmployerAuthController::class, 'getCompanies']);
+
+    Route::post('/update-docs', [EmployerAuthController::class, 'update_docs']);
     Route::middleware('auth:sanctum')->post('employer/update', [EmployerAuthController::class, 'updateEmployer']);
     Route::middleware('auth:sanctum')->get('employer/profile', [EmployerAuthController::class, 'profile']);
     Route::middleware('auth:employer-api')->post('job-posts', [JobPostController::class, 'store']);
