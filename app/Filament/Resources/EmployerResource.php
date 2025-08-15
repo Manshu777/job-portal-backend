@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\TextArea;
+use Filament\Forms\Components\Textarea;
 
 class EmployerResource extends Resource
 {
@@ -68,7 +68,7 @@ class EmployerResource extends Resource
                         }
                     }),
 
-                TextArea::make('remark')
+                Textarea::make('remark')
                     ->label('Reason for Block')
                     ->maxLength(500)
                     ->nullable()
