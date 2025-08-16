@@ -155,28 +155,29 @@ class CandidateController extends Controller
         // 2. Build Query
         $query = Candidate::query();
 
-        if ($request->filled('has_resume')) {
-            if ($request->input('has_resume') == 1) {
-                $query->whereNotNull('resume');
-            } else {
-                $query->whereNull('resume');
-            }
+        // if ($request->filled('has_resume')) {
+        //     if ($request->input('has_resume') == 1) {
+        //         $query->whereNotNull('resume');
+        //     } else {
+        //         $query->whereNull('resume');
+        //     }
+        // }
+
+
+        if ($request->filled('number_revealed')) {
+          $employer = Auth::guard('employer-api')->user();
+           \Log::error('API Error: ' . $employer);
+        if ($employer) {
+            $query->whereHas('employerview', function ($q) use ($employer, $request) {
+                $q->where('employer_id', $employer->id)
+                  ->where('number_revealed', $request->input('number_revealed'));
+            });
+             
+        } else {
+
+            $query->whereRaw('1 = 0');
         }
-
-
-    //     if ($request->filled('number_revealed')) {
-    //       $employer = Auth::guard('employer-api')->user();
-    //        \Log::error('API Error: ' . $employer);
-    //     if ($employer) {
-    //         $query->whereHas('employerViews', function ($q) use ($employer, $request) {
-    //             $q->where('employer_id', $employer->id)
-    //               ->where('number_revealed', $request->input('number_revealed'));
-    //         });
-    //     } else {
-
-    //         $query->whereRaw('1 = 0');
-    //     }
-    // }
+    }
     
 
         if ($minExperience = $request->input('min_experience')) {
@@ -306,7 +307,7 @@ class CandidateController extends Controller
             $profileVisited = false;
             if ($employer) {
                 // Check if profile has been visited or number revealed
-                $view = $candidate->employerViews()
+                $view = $candidate->employerview()
                     ->where('employer_id', $employer->id)
                     ->first();
 
@@ -315,7 +316,7 @@ class CandidateController extends Controller
 
                 // Record profile visit if not already visited
                 if (!$profileVisited) {
-                    $candidate->employerViews()->syncWithoutDetaching([
+                    $candidate->employerview()->syncWithoutDetaching([
                         $employer->id => [
                             'profile_visited' => true,
                             'visited_at' => now(),
@@ -448,7 +449,7 @@ class CandidateController extends Controller
             return response()->json(['error' => 'Candidate has no phone number'], 400);
         }
 
-        $hasRevealed = $candidate->employerViews()
+        $hasRevealed = $candidate->employerview()
             ->where('employer_id', $employer->id)
             ->where('number_revealed', true)
             ->exists();
@@ -462,7 +463,7 @@ class CandidateController extends Controller
 
         try {
             $employer->deductCredits(1);
-            $candidate->employerViews()->syncWithoutDetaching([
+            $candidate->employerview()->syncWithoutDetaching([
                 $employer->id => ['number_revealed' => true, 'revealed_at' => now()]
             ]);
             return response()->json([

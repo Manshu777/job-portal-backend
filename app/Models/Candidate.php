@@ -18,7 +18,7 @@ class Candidate extends Model
     protected $table = 'candidates';
 
     protected $fillable = [
- 'full_name',
+       'full_name',
         'dob',
         'gender',
         'email',
@@ -71,10 +71,18 @@ class Candidate extends Model
         'start_date',
         'end_date',
         'english_level',
+        'preferred_locations',
+        'preferred_languages',
+        'profile_pic'
     ];
 
   protected $casts = [
     'skills' => 'array',
+    'preferred_locations'=> 'array',
+    'preferred_languages'=> 'array',
+    'preferred_job_titles'=> 'array',
+
+
 ];
 
     public function educations()
@@ -96,7 +104,7 @@ class Candidate extends Model
     {
         return $this->hasMany(CandidateLanguage::class);
     }
-    public function employerViews()
+    public function employerview()
     {
         return $this->belongsToMany(Employer::class, 'employer_candidate_views')
                     ->withPivot('number_revealed', 'revealed_at')

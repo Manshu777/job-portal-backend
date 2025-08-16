@@ -72,7 +72,14 @@ class AllCandidateController extends Controller
         'experience_level' => 'sometimes|string|nullable',
         'is_working' => 'sometimes|string|nullable',
         'notice_period' => 'sometimes|string|nullable',
-        'preferred_job_titles' => 'sometimes|string|nullable',
+        
+        'preferred_job_titles' => 'nullable',
+     
+
+        'preferred_languages' => 'sometimes|nullable',
+        'preferred_locations' => 'sometimes|nullable', // Added
+        'profile_pic' => 'sometimes|file|mimes:jpg,jpeg,png|max:2048|nullable', // Added for image upload
+        'english_level' => 'sometimes|string|nullable',
     ]);
 
     // Update candidate properties
@@ -95,8 +102,13 @@ class AllCandidateController extends Controller
     $candidate->job_roles = $request->job_roles ?? $candidate->job_roles;
     $candidate->company_name = $request->company_name ?? $candidate->company_name;
     $candidate->current_salary = $request->current_salary ?? $candidate->current_salary;
-    // $candidate->start_year = $request->start_year ?? $candidate->start_year;
-    // $candidate->start_month = $request->start_month ?? $candidate->start_month;
+    $candidate->start_date = $request->start_date ?? $candidate->start_date;
+     $candidate->end_date = $request->end_date ?? $candidate->end_date;
+
+     $candidate->english_level = $request->english_level ?? $candidate->english_level;
+       
+
+
     $candidate->prefers_night_shift = $request->prefers_night_shift ?? $candidate->prefers_night_shift;
     $candidate->prefers_day_shift = $request->prefers_day_shift ?? $candidate->prefers_day_shift;
     $candidate->work_from_home = $request->work_from_home ?? $candidate->work_from_home;
@@ -112,10 +124,30 @@ class AllCandidateController extends Controller
     $candidate->experience_level = $request->experience_level ?? $candidate->experience_level;
     $candidate->is_working = $request->is_working ?? $candidate->is_working;
     $candidate->notice_period = $request->notice_period ?? $candidate->notice_period;
+    $candidate->employment_type = $request->employment_type ?? $candidate->employment_type;
+    $candidate->experience_type = $request->experience_type ?? $candidate->experience_type;
+      
+
+
+
+
+
+    
+    $candidate->preferred_languages = is_array($request->preferred_languages) ? json_encode($request->preferred_languages) : $candidate->preferred_languages;
+    $candidate->preferred_locations = is_array($request->preferred_locations) ? json_encode($request->preferred_locations) : $candidate->preferred_locations; // Added
+
     $candidate->preferred_job_titles = is_array($request->preferred_job_titles) ? json_encode($request->preferred_job_titles) : $candidate->preferred_job_titles;
     $candidate->password = $request->password ? Hash::make($request->password) : $candidate->password;
     $candidate->doneprofile = 1;
 
+
+    if ($request->hasFile("profile_pic")) {
+    if ($candidate->profile_pic) {
+        Storage::disk("public")->delete($candidate->profile_pic);
+    }
+    $profilePicPath = $request->file('profile_pic')->store('images', "public");
+    $candidate->profile_pic = $profilePicPath;
+}
     // Handle resume file upload
     $path = null;
     if ($request->hasFile("resume")) {

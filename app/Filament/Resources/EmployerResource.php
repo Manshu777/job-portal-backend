@@ -57,23 +57,12 @@ class EmployerResource extends Resource
                 //     ->maxLength(20),
 
 
-                Toggle::make('is_blocked')
-                    ->label('Blocked')
-                    ->onColor('danger')
-                    ->offColor('success')
-                    ->reactive()
-                    ->afterStateUpdated(function ($record, $state) {
-                        if ($state && !$record->remark) {
-                            $record->remark = '';
-                        }
-                    }),
 
                 Textarea::make('remark')
                     ->label('Reason for Block')
                     ->maxLength(500)
                     ->nullable()
-                    ->visible(fn($get) => $get('is_blocked') === true)
-                    ->required(fn($get) => $get('is_blocked') === true)
+
                     ->reactive(),
 
 
@@ -91,11 +80,11 @@ class EmployerResource extends Resource
                     ->onColor('danger')
                     ->offColor('success'),
 
-                // ToggleColumn::make('is_blocked')
-                //     ->label('Blocked')
-                //     ->sortable()
-                //     ->onColor('danger')
-                //     ->offColor('success'),
+                ToggleColumn::make('is_blocked')
+                    ->label('Blocked')
+                    ->sortable()
+                    ->onColor('danger')
+                    ->offColor('success'),
                 
                 TextColumn::make('name')->label('Full Name')->sortable()->searchable(),
                 TextColumn::make('contact_email')->label('Email')->sortable()->searchable(),
