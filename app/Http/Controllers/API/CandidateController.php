@@ -426,54 +426,73 @@ class CandidateController extends Controller
     }
 
     public function revealNumber(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'candidate_id' => 'required|integer|exists:candidates,id',
+{
+    $validator = Validator::make($request->all(), [
+        'candidate_id' => 'required|integer|exists:candidates,id',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'error' => 'Invalid input',
+            'messages' => $validator->errors()
+        ], 422);
+    }
+
+    $employer = Auth::guard('employer-api')->user();
+    if (!$employer) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $candidate = Candidate::findOrFail($request->input('candidate_id'));
+    if (!$candidate->number) {
+        return response()->json(['error' => 'Candidate has no phone number'], 400);
+    }
+
+    // ✅ Check if already revealed
+    $hasRevealed = $candidate->employerview()
+        ->where('employer_id', $employer->id)
+        ->where('number_revealed', true)
+        ->exists();
+
+    if ($hasRevealed) {
+        return response()->json([
+            'message' => 'Number already revealed',
+            'number' => $candidate->number
+        ]);
+    }
+
+    try {
+        // ✅ Deduct from DATABASE credits, not job post credits
+        $minimumCreditsRequired = 1;
+        if (!$employer->hasEnoughCredits($minimumCreditsRequired, 'database')) {
+            return response()->json([
+                'error' => 'Insufficient database credits',
+                'current_database_credits' => $employer->database_credits,
+            ], 403);
+        }
+
+        // Deduct 1 database credit
+        $employer->deductCredits(1, 'database');
+
+        // Save employer-candidate relation
+        $candidate->employerview()->syncWithoutDetaching([
+            $employer->id => [
+                'number_revealed' => true,
+                'revealed_at' => now()
+            ]
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => 'Invalid input',
-                'messages' => $validator->errors()
-            ], 422);
-        }
+        return response()->json([
+            'message' => 'Number revealed successfully',
+            'number' => $candidate->number,
+            'remaining_database_credits' => $employer->database_credits,
+        ]);
 
-        $employer = Auth::guard('employer-api')->user();
-        if (!$employer) {
-            return response()->json(['error' => 'Unauthorized'], 401);
-        }
-
-        $candidate = Candidate::findOrFail($request->input('candidate_id'));
-
-        if (!$candidate->number) {
-            return response()->json(['error' => 'Candidate has no phone number'], 400);
-        }
-
-        $hasRevealed = $candidate->employerview()
-            ->where('employer_id', $employer->id)
-            ->where('number_revealed', true)
-            ->exists();
-
-        if ($hasRevealed) {
-            return response()->json([
-                'message' => 'Number already revealed',
-                'number' => $candidate->number
-            ]);
-        }
-
-        try {
-            $employer->deductCredits(1);
-            $candidate->employerview()->syncWithoutDetaching([
-                $employer->id => ['number_revealed' => true, 'revealed_at' => now()]
-            ]);
-            return response()->json([
-                'message' => 'Number revealed successfully',
-                'number' => $candidate->number
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 400);
-        }
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 400);
     }
+}
+
   
    
 }

@@ -31,7 +31,7 @@ Route::get('/user', function (Request $request) {
 Route::prefix('v1')->group(function () {
     Route::apiResource('candidate', CandidateController::class);
     Route::get('/candidateprofile', [AuthController::class, 'profile']);
-
+    Route::get('/job/{slug}', [JobPostController::class, 'show']);
     Route::apiResource('candidate/lan', CandidateLanguageController::class);
     Route::apiResource('candidate/skills', CandidateSkillController::class);
     Route::apiResource('candidate/exp', CandidateExperienceController::class);
@@ -58,8 +58,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->post('employer/update', [EmployerAuthController::class, 'updateEmployer']);
     Route::middleware('auth:sanctum')->get('employer/profile', [EmployerAuthController::class, 'profile']);
     Route::middleware('auth:employer-api')->post('job-posts', [JobPostController::class, 'store']);
-
-
+    
     Route::put('/jobs/{jobId}/refresh', [JobPostController::class, 'refreshJob']);
 
 

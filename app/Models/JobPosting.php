@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Parallax\FilamentComments\Models\Traits\HasFilamentComments;
-
+use Illuminate\Support\Str; // Ensure this import is present
 class JobPosting extends Model
 {
     use HasFactory,HasFilamentComments;
@@ -48,6 +48,7 @@ class JobPosting extends Model
      'min_salary',
         'max_salary',
         'incentive',
+        'slug'
         
     ];
 
@@ -59,6 +60,34 @@ class JobPosting extends Model
         'joining_fee' => 'boolean',
         'is_walkin_interview' => 'boolean',
     ];
+
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Automatically generate slug before saving
+        static::saving(function ($model) {
+            $model->slug = $model->generateSlug();
+        });
+    }
+
+    // Method to generate SEO-friendly slug
+    public function generateSlug()
+    {
+        $baseSlug = Str::slug($this->job_title . '-' . $this->location);
+
+        // Ensure uniqueness by appending a number suffixes if the slug already exists
+        $slug = $baseSlug;
+        $count = 1;
+
+        while (static::where('slug', $slug)->where('id', '!=', $this->id)->exists()) {
+            $slug = $baseSlug . '-' . $count++;
+        }
+
+        return $slug;
+    }
+
 
     public function employer()
     {

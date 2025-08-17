@@ -10,29 +10,33 @@ class Employer extends Model
 {
     use HasFactory, HasApiTokens;
 
-    protected $fillable = [
-        'name',
-        'gst_number',
-        'company_name',
-        'company_location',
-        'contact_person',
-        'contact_email',
-        'contact_phone',
-        'password',
-        'email_verified_at',
-        'otp',
-        'is_verified',
-        'session_token',
-        'is_blocked',
-        'credits',
-        'remark',
-    ];
+   protected $fillable = [
+    'name',
+    'gst_number',
+    'company_name',
+    'company_location',
+    'contact_person',
+    'contact_email',
+    'contact_phone',
+    'password',
+    'email_verified_at',
+    'otp',
+    'is_verified',
+    'session_token',
+    'is_blocked',
+    'job_post_credits',
+    'database_credits',
+    'remark',
+];
+
 
     protected $hidden = ['password', 'otp'];
 
     protected $casts = [
         'email_verified_at' => 'datetime',
-        'credits' => 'integer',
+ 
+    'job_post_credits' => 'integer',
+    'database_credits' => 'integer',
     ];
 
     public function jobPostings()
@@ -50,35 +54,42 @@ class Employer extends Model
         return $this->hasMany(CreditTransaction::class);
     }
 
-    public function deductCredits($amount)
-    {
-        if ($this->credits >= $amount) {
-            $this->credits -= $amount;
-            $this->save();
-            $this->creditTransactions()->create([
-                'amount' => -$amount,
-                'type' => 'deduction',
-                'description' => 'Credits deducted for job posting',
-                'transaction_date' => now(),
-            ]);
-            return true;
-        }
-        return false;
-    }
+ public function deductCredits($amount, $type = 'job_post')
+{
+    $field = $type . '_credits';
 
-    public function addCredits($amount, $description = 'Credits purchased')
-    {
-        $this->credits += $amount;
+    if ($this->$field >= $amount) {
+        $this->$field -= $amount;
         $this->save();
+
         $this->creditTransactions()->create([
-            'amount' => $amount,
-            'type' => 'purchase',
-            'description' => $description,
+            'amount' => -$amount,
+            'type' => 'deduction',
+            'credit_type' => $type,
+            'description' => ucfirst($type) . ' credits deducted',
             'transaction_date' => now(),
         ]);
         return true;
     }
+    return false;
+}
 
+    public function addCredits($amount, $type = 'job_post', $description = 'Credits purchased')
+{
+    $field = $type . '_credits';
+
+    $this->$field += $amount;
+    $this->save();
+
+    $this->creditTransactions()->create([
+        'amount' => $amount,
+        'type' => 'purchase',
+        'credit_type' => $type,
+        'description' => ucfirst($type) . ' credits added - ' . $description,
+        'transaction_date' => now(),
+    ]);
+    return true;
+}
      public function viewedCandidates()
     {
         return $this->belongsToMany(Candidate::class, 'employer_candidate_views')
@@ -86,8 +97,26 @@ class Employer extends Model
                     ->withTimestamps();
     }
 
-    public function hasEnoughCredits($amount)
-    {
-        return $this->credits >= $amount;
+
+    public function resetDailyCredits()
+{
+    $today = now()->toDateString();
+
+    // Only reset once per day
+    if ($this->last_credit_reset !== $today) {
+        $this->job_post_credits = 30;
+        $this->database_credits = 20;
+        $this->last_credit_reset = $today;
+        $this->save();
     }
+}
+
+  
+public function hasEnoughCredits($amount, $type = 'job_post')
+{
+    $field = $type . '_credits';
+   
+   
+    return $this->$field >= $amount;
+}
 }

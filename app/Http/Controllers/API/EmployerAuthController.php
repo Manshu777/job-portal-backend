@@ -562,6 +562,7 @@ class EmployerAuthController extends Controller
     {
         // Retrieve the authenticated employer using the 'employer-api' guard
         $employer = Auth::guard('employer-api')->user();
+  
 
         if (!$employer) {
             return response()->json([
@@ -569,6 +570,8 @@ class EmployerAuthController extends Controller
                 'message' => 'Unauthorized',
             ], 401);
         }
+
+        $employer->resetDailyCredits();
 
         return response()->json([
             'success' => true,
