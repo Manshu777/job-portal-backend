@@ -15,3 +15,13 @@ ADD COLUMN credit_type ENUM('job_post', 'database') NOT NULL DEFAULT 'job_post';
 
 ALTER TABLE employers
 ADD COLUMN last_credit_reset DATE NULL;
+
+
+ALTER TABLE employers 
+    DROP COLUMN is_verified,
+    DROP COLUMN is_blocked;
+
+ALTER TABLE employers 
+    ADD COLUMN is_verified TINYINT(1) NOT NULL DEFAULT 1 AFTER session_token,
+    ADD COLUMN is_blocked TINYINT(1) NOT NULL DEFAULT 1 AFTER is_verified;
+
