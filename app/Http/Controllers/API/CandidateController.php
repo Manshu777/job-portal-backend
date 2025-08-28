@@ -155,29 +155,30 @@ class CandidateController extends Controller
         // 2. Build Query
         $query = Candidate::query();
 
-        // if ($request->filled('has_resume')) {
-        //     if ($request->input('has_resume') == 1) {
-        //         $query->whereNotNull('resume');
-        //     } else {
-        //         $query->whereNull('resume');
-        //     }
-        // }
-
-
-        if ($request->filled('number_revealed')) {
-          $employer = Auth::guard('employer-api')->user();
-           \Log::error('API Error: ' . $employer);
-        if ($employer) {
-            $query->whereHas('employerview', function ($q) use ($employer, $request) {
-                $q->where('employer_id', $employer->id)
-                  ->where('number_revealed', $request->input('number_revealed'));
-            });
-             
-        } else {
-
-            $query->whereRaw('1 = 0');
+        if ($request->filled('has_resume')) {
+            if ($request->input('has_resume') == 1) {
+                $query->whereNotNull('resume');
+            } else {
+                $query->whereNull('resume');
+            }
         }
+
+
+       if ($request->filled('number_revealed')) {
+    $employer = Auth::guard('employer-api')->user();
+    \Log::info('Employer ID: ' . ($employer ? $employer->id : 'null'));
+    \Log::info('number_revealed input: ' . gettype($request->input('number_revealed')) . ' - ' . $request->input('number_revealed'));
+    if ($employer) {
+        $query->whereHas('employerview', function ($q) use ($employer, $request) {
+            $q->where('employer_id', $employer->id)
+              ->where('number_revealed', (int) $request->input('number_revealed'));
+        });
+        \Log::info('number_revealed query: ' . $query->toSql(), $query->getBindings());
+    } else {
+        \Log::warning('No authenticated employer for number_revealed filter');
+        $query->whereRaw('1 = 0');
     }
+}
     
 
         if ($minExperience = $request->input('min_experience')) {
@@ -423,7 +424,7 @@ class CandidateController extends Controller
                 'max_age'           => $maxAge,
             ]
         ]);
-    }
+}
 
     public function revealNumber(Request $request)
 {
