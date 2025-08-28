@@ -166,16 +166,15 @@ class CandidateController extends Controller
 
        if ($request->filled('number_revealed')) {
     $employer = Auth::guard('employer-api')->user();
-    \Log::info('Employer ID: ' . ($employer ? $employer->id : 'null'));
-    \Log::info('number_revealed input: ' . gettype($request->input('number_revealed')) . ' - ' . $request->input('number_revealed'));
+
     if ($employer) {
         $query->whereHas('employerview', function ($q) use ($employer, $request) {
             $q->where('employer_id', $employer->id)
               ->where('number_revealed', (int) $request->input('number_revealed'));
         });
-        \Log::info('number_revealed query: ' . $query->toSql(), $query->getBindings());
+
     } else {
-        \Log::warning('No authenticated employer for number_revealed filter');
+  
         $query->whereRaw('1 = 0');
     }
 }
