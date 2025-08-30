@@ -110,4 +110,27 @@ class Candidate extends Model
                     ->withPivot('number_revealed', 'revealed_at')
                     ->withTimestamps();
     }
+
+    public function scopeFilter($query, array $filters)
+{
+    if (!empty($filters['degree'])) {
+        $query->whereRaw('LOWER(degree) = ?', [strtolower($filters['degree'])]);
+    }
+
+    if (!empty($filters['specialization'])) {
+        $query->whereRaw('LOWER(specialization) LIKE ?', ['%' . strtolower($filters['specialization']) . '%']);
+    }
+
+    if (!empty($filters['city'])) {
+        $query->whereRaw('LOWER(city) LIKE ?', [strtolower($filters['city'])]);
+    }
+
+    if (!empty($filters['min_experience'])) {
+        $query->whereRaw('(experience_years * 12 + experience_months) >= ?', [(int)$filters['min_experience'] * 12]);
+    }
+
+    if (!empty($filters['max_experience'])) {
+        $query->whereRaw('(experience_years * 12 + experience_months) <= ?', [(int)$filters['max_experience'] * 12]);
+    }
+}
 }
