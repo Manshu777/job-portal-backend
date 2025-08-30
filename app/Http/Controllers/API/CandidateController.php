@@ -163,22 +163,36 @@ class CandidateController extends Controller
             }
         }
 
+     if ($request->filled('number_revealed')) {
+    $employer = Auth::guard('employer-api')->user();
 
-//        if ($request->filled('number_revealed')) {
-//     $employer = Auth::guard('employer-api')->user();
+    if ($employer) {
+        $numberRevealed = (int) $request->input('number_revealed');
 
-//     if ($employer) {
-//         $query->whereHas('employerview', function ($q) use ($employer, $request) {
-//             $q->where('employer_id', $employer->id)
-//               ->where('number_revealed', (int) $request->input('number_revealed'));
-//         });
+        if ($numberRevealed === 1) {
+            // revealed candidates
+            $query->whereHas('employerview', function ($q) use ($employer) {
+                $q->where('employer_id', $employer->id)
+                  ->where('number_revealed', 1);
+            });
+        } else {
+            // not revealed candidates (0 or no record at all)
+            $query->where(function ($q) use ($employer) {
+                $q->whereHas('employerview', function ($sq) use ($employer) {
+                        $sq->where('employer_id', $employer->id)
+                           ->where('number_revealed', 0);
+                    })
+                  ->orWhereDoesntHave('employerview', function ($sq) use ($employer) {
+                        $sq->where('employer_id', $employer->id);
+                    });
+            });
+        }
 
-//     } else {
+    } else {
+        $query->whereRaw('1 = 0');
+    }
+}
   
-//         $query->whereRaw('1 = 0');
-//     }
-// }
-    
 
         if ($minExperience = $request->input('min_experience')) {
             $query->whereRaw('(experience_years * 12 + experience_months) >= ?', [(int)$minExperience * 12]);
@@ -205,20 +219,49 @@ class CandidateController extends Controller
         }
 
         if ($keywords = $request->input('must_have_keywords')) {
-            $keywordArray = array_map('trim', explode(',', $keywords));
-            foreach ($keywordArray as $keyword) {
-                $query->whereHas('skills', function ($q) use ($keyword) {
-                    $q->whereRaw('LOWER(skill_name) LIKE ?', ['%' . strtolower($keyword) . '%']);
-                });
-            }
-        }
+    $keywordArray = array_map('trim', explode(',', $keywords));
 
-        if ($excludeKeywords = $request->input('exclude_keywords')) {
-            $excludeArray = array_map('trim', explode(',', $excludeKeywords));
-            $query->whereDoesntHave('skills', function ($q) use ($excludeArray) {
-                $q->whereIn(DB::raw('LOWER(skill_name)'), array_map('strtolower', $excludeArray));
-            });
+    foreach ($keywordArray as $keyword) {
+        $query->where(function ($q) use ($keyword) {
+            // skills relation
+            $q->whereHas('skills', function ($sq) use ($keyword) {
+                $sq->whereRaw('LOWER(skill_name) LIKE ?', ['%' . strtolower($keyword) . '%']);
+            })
+
+            // direct columns
+            ->orWhereRaw('LOWER(degree) LIKE ?', ['%' . strtolower($keyword) . '%'])
+            ->orWhereRaw('LOWER(specialization) LIKE ?', ['%' . strtolower($keyword) . '%'])
+            ->orWhereRaw('LOWER(job_title) LIKE ?', ['%' . strtolower($keyword) . '%'])
+            ->orWhereRaw('LOWER(job_roles) LIKE ?', ['%' . strtolower($keyword) . '%'])
+             ->orWhereRaw('LOWER(city) LIKE ?', ['%' . strtolower($keyword) . '%'])
+            ->orWhereRaw('LOWER(state) LIKE ?', ['%' . strtolower($keyword) . '%'])
+            ->orWhereRaw('LOWER(preferred_language) LIKE ?', ['%' . strtolower($keyword) . '%'])
+         
+            //city
+
+            // preferred_job_titles is JSON/array, use JSON_SEARCH (MySQL) 
+            ->orWhereRaw("JSON_SEARCH(LOWER(JSON_EXTRACT(preferred_job_titles, '$')), 'one', ? ) IS NOT NULL", [strtolower($keyword)]);
+        });
+    }
+}
+
+if ($excludeKeywords = $request->input('exclude_keywords')) {
+    $excludeArray = array_map('trim', explode(',', $excludeKeywords));
+
+    $query->where(function ($q) use ($excludeArray) {
+        // Exclude from skills relation
+        $q->whereDoesntHave('skills', function ($sq) use ($excludeArray) {
+            $sq->whereIn(DB::raw('LOWER(skill_name)'), array_map('strtolower', $excludeArray));
+        });
+
+        foreach ($excludeArray as $ex) {
+            $q->whereRaw('LOWER(degree) NOT LIKE ?', ['%' . strtolower($ex) . '%'])
+              ->whereRaw('LOWER(specialization) NOT LIKE ?', ['%' . strtolower($ex) . '%'])
+              ->whereRaw('LOWER(city) NOT LIKE ?', ['%' . strtolower($ex) . '%']);
         }
+    });
+}
+
 
         if ($request->filled('active')) {
             $query->where('active_user', $request->input('active'));
