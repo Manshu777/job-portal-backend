@@ -164,20 +164,20 @@ class CandidateController extends Controller
         }
 
 
-       if ($request->filled('number_revealed')) {
-    $employer = Auth::guard('employer-api')->user();
+//        if ($request->filled('number_revealed')) {
+//     $employer = Auth::guard('employer-api')->user();
 
-    if ($employer) {
-        $query->whereHas('employerview', function ($q) use ($employer, $request) {
-            $q->where('employer_id', $employer->id)
-              ->where('number_revealed', (int) $request->input('number_revealed'));
-        });
+//     if ($employer) {
+//         $query->whereHas('employerview', function ($q) use ($employer, $request) {
+//             $q->where('employer_id', $employer->id)
+//               ->where('number_revealed', (int) $request->input('number_revealed'));
+//         });
 
-    } else {
+//     } else {
   
-        $query->whereRaw('1 = 0');
-    }
-}
+//         $query->whereRaw('1 = 0');
+//     }
+// }
     
 
         if ($minExperience = $request->input('min_experience')) {
