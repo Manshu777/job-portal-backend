@@ -111,6 +111,228 @@ class CandidateController extends Controller
     }
 
 
+    public function getSuggestions(Request $request)
+    {
+        // 1. Validate input
+        $validator = \Validator::make($request->all(), [
+            'query' => 'nullable|string|max:255',
+            'type'  => 'required|string|in:keywords,locations',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Invalid input',
+                'messages' => $validator->errors()
+            ], 422);
+        }
+
+        $queryString = strtolower(trim($request->input('query', '')));
+        $type = $request->input('type');
+        $suggestions = [];
+
+        // 2. Build Query
+        $query = Candidate::query();
+
+        if ($type === 'keywords') {
+            // Fetch suggestions for keywords (skills, job_title, preferred_job_titles, specialization, degree)
+            $skills = $query->select('skills.skill_name as value')
+                ->join('skills', 'candidates.id', '=', 'skills.candidate_id')
+                ->whereNotNull('skills.skill_name')
+                ->when($queryString, function ($q) use ($queryString) {
+                    $q->whereRaw('LOWER(skills.skill_name) LIKE ?', ['%' . $queryString . '%']);
+                })
+                ->distinct()
+                ->pluck('value')
+                ->map(function ($value) {
+                    return ['value' => $value, 'label' => $value];
+                });
+
+            $jobTitles = $query->select('job_title as value')
+                ->whereNotNull('job_title')
+                ->when($queryString, function ($q) use ($queryString) {
+                    $q->whereRaw('LOWER(job_title) LIKE ?', ['%' . $queryString . '%']);
+                })
+                ->distinct()
+                ->pluck('value')
+                ->map(function ($value) {
+                    return ['value' => $value, 'label' => $value];
+                });
+
+            $preferredJobTitles = $query->select('preferred_job_titles')
+                ->whereNotNull('preferred_job_titles')
+                ->get()
+                ->flatMap(function ($candidate) use ($queryString) {
+                    $titles = is_string($candidate->preferred_job_titles)
+                        ? json_decode($candidate->preferred_job_titles, true)
+                        : $candidate->preferred_job_titles;
+                    return is_array($titles) ? array_filter($titles, function ($title) use ($queryString) {
+                        return $queryString ? stripos($title, $queryString) !== false : true;
+                    }) : [];
+                })
+                ->unique()
+                ->map(function ($value) {
+                    return ['value' => $value, 'label' => $value];
+                });
+
+            $specializations = $query->select('specialization as value')
+                ->whereNotNull('specialization')
+                ->when($queryString, function ($q) use ($queryString) {
+                    $q->whereRaw('LOWER(specialization) LIKE ?', ['%' . $queryString . '%']);
+                })
+                ->distinct()
+                ->pluck('value')
+                ->map(function ($value) {
+                    return ['value' => $value, 'label' => $value];
+                });
+
+            $degrees = $query->select('degree as value')
+                ->whereNotNull('degree')
+                ->when($queryString, function ($q) use ($queryString) {
+                    $q->whereRaw('LOWER(degree) LIKE ?', ['%' . $queryString . '%']);
+                })
+                ->distinct()
+                ->pluck('value')
+                ->map(function ($value) {
+                    return ['value' => $value, 'label' => $value];
+                });
+
+            // Merge and limit to 10 suggestions
+            $suggestions = $skills
+                ->merge($jobTitles)
+                ->merge($preferredJobTitles)
+                ->merge($specializations)
+                ->merge($degrees)
+                ->unique('value')
+                ->take(10)
+                ->values();
+        } elseif ($type === 'locations') {
+            // Fetch suggestions for locations (city, state)
+            $cities = $query->select('city as value')
+                ->whereNotNull('city')
+                ->when($queryString, function ($q) use ($queryString) {
+                    $q->whereRaw('LOWER(city) LIKE ?', ['%' . $queryString . '%']);
+                })
+                ->distinct()
+                ->pluck('value')
+                ->map(function ($value) {
+                    return ['value' => $value, 'label' => $value];
+                });
+
+            $states = $query->select('state as value')
+                ->whereNotNull('state')
+                ->when($queryString, function ($q) use ($queryString) {
+                    $q->whereRaw('LOWER(state) LIKE ?', ['%' . $queryString . '%']);
+                })
+                ->distinct()
+                ->pluck('value')
+                ->map(function ($value) {
+                    return ['value' => $value, 'label' => $value];
+                });
+
+            // Merge and limit to 3 suggestions
+            $suggestions = $cities
+                ->merge($states)
+                ->unique('value')
+                ->take(3)
+                ->values();
+        }
+
+        // 3. Return Response
+        return response()->json([
+            'data' => $suggestions
+        ]);
+    }
+
+
+      public function getDistinctValues(Request $request)
+    {
+        // 1. Initialize query
+        $query = Candidate::query();
+
+        // 2. Get distinct locations (city, state)
+        $cities = $query->select('city')
+            ->whereNotNull('city')
+            ->distinct()
+            ->pluck('city')
+            ->map(function ($city) {
+                return ['value' => $city];
+            })->values();
+
+        $states = $query->select('state')
+            ->whereNotNull('state')
+            ->distinct()
+            ->pluck('state')
+            ->map(function ($state) {
+                return ['value' => $state];
+            })->values();
+
+        // Combine city and state for locations
+        $locations = $cities->merge($states)->unique('value')->values();
+
+        // 3. Get distinct keyword-related fields
+        $skills = $query->select('skills.skill_name as value')
+            ->join('skills', 'candidates.id', '=', 'skills.candidate_id')
+            ->whereNotNull('skills.skill_name')
+            ->distinct()
+            ->pluck('value')
+            ->map(function ($skill) {
+                return ['value' => $skill];
+            })->values();
+
+        $jobTitles = $query->select('job_title')
+            ->whereNotNull('job_title')
+            ->distinct()
+            ->pluck('job_title')
+            ->map(function ($jobTitle) {
+                return ['value' => $jobTitle];
+            })->values();
+
+        $preferredJobTitles = $query->select('preferred_job_titles')
+            ->whereNotNull('preferred_job_titles')
+            ->get()
+            ->flatMap(function ($candidate) {
+                $titles = is_string($candidate->preferred_job_titles) 
+                    ? json_decode($candidate->preferred_job_titles, true)
+                    : $candidate->preferred_job_titles;
+                return is_array($titles) ? $titles : [];
+            })
+            ->unique()
+            ->map(function ($title) {
+                return ['value' => $title];
+            })->values();
+
+        $specializations = $query->select('specialization')
+            ->whereNotNull('specialization')
+            ->distinct()
+            ->pluck('specialization')
+            ->map(function ($specialization) {
+                return ['value' => $specialization];
+            })->values();
+
+        $degrees = $query->select('degree')
+            ->whereNotNull('degree')
+            ->distinct()
+            ->pluck('degree')
+            ->map(function ($degree) {
+                return ['value' => $degree];
+            })->values();
+
+        // 4. Return response
+        return response()->json([
+            'data' => [
+                'locations' => $locations,
+                'cities' => $cities,
+                'states' => $states,
+                'skills' => $skills,
+                'job_titles' => $jobTitles,
+                'preferred_job_titles' => $preferredJobTitles,
+                'specializations' => $specializations,
+                'degrees' => $degrees,
+            ]
+        ]);
+    }
+
+
 
     public function filter(Request $request)
     {

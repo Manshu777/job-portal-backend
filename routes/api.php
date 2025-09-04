@@ -30,6 +30,7 @@ Route::get('/user', function (Request $request) {
 
 Route::prefix('v1')->group(function () {
     Route::apiResource('candidate', CandidateController::class);
+     Route::get('/suggestions', [CandidateController::class, 'getSuggestions'])->name('suggestions');
     Route::get('/candidateprofile', [AuthController::class, 'profile']);
     Route::get('/job/{slug}', [JobPostController::class, 'show']);
     Route::apiResource('candidate/lan', CandidateLanguageController::class);
