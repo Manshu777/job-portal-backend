@@ -1,8 +1,11 @@
 <?php
+
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\CandidateResource\Pages;
+use App\Imports\CandidatesImport;
 use App\Models\Candidate;
+use App\Exports\CandidateTemplateExport;
 use Filament\Forms;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Grid;
@@ -20,8 +23,10 @@ use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Maatwebsite\Excel\Facades\Excel;
 use pxlrbt\FilamentExcel\Actions\Tables\ExportAction;
 use pxlrbt\FilamentExcel\Exports\ExcelExport;
+use Illuminate\Database\Eloquent\Builder;
 
 class CandidateResource extends Resource
 {
@@ -31,7 +36,6 @@ class CandidateResource extends Resource
 
     public static function form(Form $form): Form
     {
-        // Your existing form code remains unchanged
         return $form
             ->schema([
                 Section::make('Personal Information')
@@ -51,8 +55,12 @@ class CandidateResource extends Resource
                                     'other'  => 'Other',
                                 ])
                                 ->required()
-                                ->placeholder('Select Gender')
-                                ->columnSpan(2),
+                                ->placeholder('Select Gender'),
+                            TextInput::make('email')
+                                ->email()
+                                ->required()
+                                ->placeholder('Email Address')
+                                ->columnSpanFull(),
                             Textarea::make('address')
                                 ->columnSpanFull()
                                 ->placeholder('Enter Address'),
@@ -60,17 +68,78 @@ class CandidateResource extends Resource
                                 ->placeholder('City'),
                             TextInput::make('state')
                                 ->placeholder('State'),
-                            TextInput::make('email')
-                                ->email()
-                                ->required()
-                                ->placeholder('Email Address')
-                                ->columnSpanFull(),
+                            TextInput::make('number')
+                                ->placeholder('Phone Number'),
+                            TextInput::make('profile_pic')
+                                ->placeholder('Profile Picture URL'),
+                        ]),
+                    ]),
+
+                Section::make('Education Details')
+                    ->schema([
+                        Grid::make(3)->schema([
+                            TextInput::make('degree')
+                                ->placeholder('Degree'),
+                            TextInput::make('specialization')
+                                ->placeholder('Specialization'),
+                            TextInput::make('college_name')
+                                ->placeholder('College Name'),
+                            TextInput::make('education_level')
+                                ->placeholder('Education Level'),
+                            TextInput::make('highest_education')
+                                ->placeholder('Highest Education'),
+                            TextInput::make('school_medium')
+                                ->placeholder('School Medium'),
+                            TextInput::make('passing_marks')
+                                ->numeric()
+                                ->placeholder('Passing Marks'),
+                            Toggle::make('currently_pursuing')
+                                ->label('Currently Pursuing')
+                                ->default(false),
+                            Toggle::make('pursuing')
+                                ->label('Pursuing')
+                                ->default(false),
+                            TextInput::make('complete_years')
+                                ->numeric()
+                                ->placeholder('Completion Years'),
+                            TextInput::make('complete_month')
+                                ->numeric()
+                                ->placeholder('Completion Month'),
+                            TextInput::make('english_level')
+                                ->placeholder('English Proficiency Level'),
                         ]),
                     ]),
 
                 Section::make('Job Preferences')
                     ->schema([
-                        Grid::make(2)->schema([
+                        Grid::make(3)->schema([
+                            TextInput::make('job_title')
+                                ->placeholder('Job Title'),
+                            TextInput::make('company_name')
+                                ->placeholder('Company Name'),
+                            TextInput::make('experience_type')
+                                ->placeholder('Experience Type'),
+                            TextInput::make('employment_type')
+                                ->placeholder('Employment Type'),
+                            TextInput::make('preferred_language')
+                                ->placeholder('Preferred Language'),
+                            TagsInput::make('preferred_job_titles')
+                                ->placeholder('Preferred Job Titles')
+                                ->columnSpanFull(),
+                            TagsInput::make('preferred_locations')
+                                ->placeholder('Preferred Locations')
+                                ->columnSpanFull(),
+                            TagsInput::make('preferred_languages')
+                                ->placeholder('Preferred Languages')
+                                ->columnSpanFull(),
+                            TextInput::make('current_salary')
+                                ->numeric()
+                                ->placeholder('Current Salary'),
+                            TextInput::make('notice_period')
+                                ->placeholder('Notice Period'),
+                            Toggle::make('is_working')
+                                ->label('Is Working')
+                                ->default(false),
                             Toggle::make('prefers_night_shift')
                                 ->label('Prefers Night Shift')
                                 ->default(false),
@@ -86,8 +155,24 @@ class CandidateResource extends Resource
                             Toggle::make('field_job')
                                 ->label('Field Job')
                                 ->default(false),
-                            TextInput::make('employment_type')
-                                ->placeholder('Preferred Employment Type (e.g., Full-time, Part-time)'),
+                        ]),
+                    ]),
+
+                Section::make('Experience')
+                    ->schema([
+                        Grid::make(3)->schema([
+                            TextInput::make('experience_years')
+                                ->numeric()
+                                ->placeholder('Experience Years'),
+                            TextInput::make('experience_months')
+                                ->numeric()
+                                ->placeholder('Experience Months'),
+                            TextInput::make('experience_level')
+                                ->placeholder('Experience Level'),
+                            DatePicker::make('start_date')
+                                ->placeholder('Job Start Date'),
+                            DatePicker::make('end_date')
+                                ->placeholder('Job End Date'),
                         ]),
                     ]),
 
@@ -105,13 +190,7 @@ class CandidateResource extends Resource
 
                 Section::make('Account Information')
                     ->schema([
-                        Grid::make(2)->schema([
-                            Toggle::make('active_user')
-                                ->label('Active User')
-                                ->default(true),
-                            Toggle::make('doneprofile')
-                                ->label('Profile Completed')
-                                ->default(false),
+                        Grid::make(3)->schema([
                             TextInput::make('password')
                                 ->password()
                                 ->placeholder('Enter Password')
@@ -120,6 +199,14 @@ class CandidateResource extends Resource
                                 ->placeholder('OTP (if applicable)'),
                             DatePicker::make('otp_expires_at')
                                 ->placeholder('OTP Expiry Date'),
+                            TextInput::make('token')
+                                ->placeholder('Token'),
+                            Toggle::make('active_user')
+                                ->label('Active User')
+                                ->default(true),
+                            Toggle::make('doneprofile')
+                                ->label('Profile Completed')
+                                ->default(false),
                             DatePicker::make('last_login')
                                 ->placeholder('Last Login Date')
                                 ->disabled(),
@@ -130,6 +217,12 @@ class CandidateResource extends Resource
                             TextInput::make('total_job_views')
                                 ->numeric()
                                 ->placeholder('Total Job Views')
+                                ->disabled(),
+                            DatePicker::make('created_at')
+                                ->placeholder('Profile Created')
+                                ->disabled(),
+                            DatePicker::make('updated_at')
+                                ->placeholder('Profile Updated')
                                 ->disabled(),
                         ]),
                     ]),
@@ -153,108 +246,167 @@ class CandidateResource extends Resource
                     'shift_preference',
                 ]);
 
-                return $query->filter($filters); // reuses scopeFilter
+                return $query->filter($filters);
             })
-            ->columns(
-                [
-                    TextColumn::make('full_name')
-                        ->searchable()
-                        ->sortable()
-                        ->icon('heroicon-o-user'),
-                    TextColumn::make('email')
-                        ->searchable(),
-                    BadgeColumn::make('gender')
-                        ->colors([
-                            'primary' => 'male',
-                            'success' => 'female',
-                            'warning' => 'other',
-                        ]),
-                    TextColumn::make('city')
-                        ->searchable(),
-                    TextColumn::make('state')
-                        ->searchable(),
-                    TextColumn::make('dob')
-                        ->label('Date of Birth')
-                        ->date()
-                        ->sortable(),
-                    TextColumn::make('education_level')
-                        ->searchable()
-                        ->label('Degree'),
-                    TextColumn::make('specialization')
-                        ->searchable()
-                        ->label('Specialization'),
-                    BadgeColumn::make('experience_level')
-                        ->label('Experience')
-                        ->colors([
-                            'success'   => 'Fresher',
-                            'primary'   => 'Mid-level',
-                            'warning'   => 'Senior',
-                            'secondary' => fn($state) => ! in_array($state, ['Fresher', 'Mid-level', 'Senior']),
-                        ]),
-                    TextColumn::make('highest_education')
-                        ->label('Highest Education')
-                        ->searchable(),
-                    TextColumn::make('complete_years')
-                        ->label('Graduation Year')
-                        ->sortable(),
-                    TextColumn::make('number')
-                        ->label('Phone Number')
-                        ->searchable(),
-                    IconColumn::make('prefers_night_shift')
-                        ->boolean()
-                        ->label('Night Shift')
-                        ->trueIcon('heroicon-o-moon')
-                        ->falseIcon('heroicon-o-x-circle'),
-                    IconColumn::make('prefers_day_shift')
-                        ->boolean()
-                        ->label('Day Shift')
-                        ->trueIcon('heroicon-o-sun')
-                        ->falseIcon('heroicon-o-x-circle'),
-                    IconColumn::make('work_from_home')
-                        ->boolean()
-                        ->label('WFH')
-                        ->trueIcon('heroicon-o-home')
-                        ->falseIcon('heroicon-o-x-circle'),
-                    IconColumn::make('work_from_office')
-                        ->boolean()
-                        ->label('Office')
-                        ->trueIcon('heroicon-o-building-office')
-                        ->falseIcon('heroicon-o-x-circle'),
-                    IconColumn::make('field_job')
-                        ->boolean()
-                        ->label('Field Job')
-                        ->trueIcon('heroicon-o-briefcase')
-                        ->falseIcon('heroicon-o-x-circle'),
-                    TextColumn::make('employment_type')
-                        ->label('Employment Type'),
-                    TextColumn::make('skills')
-                        ->formatStateUsing(fn($state) => is_array($state) ? implode(', ', $state) : $state)
-                        ->limit(25),
-                    TextColumn::make('total_jobs_applied')
-                        ->label('Applied')
-                        ->sortable(),
-                    TextColumn::make('total_job_views')
-                        ->label('Views')
-                        ->sortable(),
-                    IconColumn::make('active_user')
-                        ->boolean()
-                        ->label('Active')
-                        ->trueIcon('heroicon-o-check-circle')
-                        ->falseIcon('heroicon-o-x-circle'),
-                    IconColumn::make('doneprofile')
-                        ->boolean()
-                        ->label('Profile Done')
-                        ->trueIcon('heroicon-o-check-badge')
-                        ->falseIcon('heroicon-o-x-circle'),
-                    TextColumn::make('last_login')
-                        ->dateTime()
-                        ->sortable(),
-                    TextColumn::make('created_at')
-                        ->label('Profile Created')
-                        ->dateTime()
-                        ->sortable(),
-                ]
-            )
+            ->columns([
+                TextColumn::make('full_name')
+                    ->searchable()
+                    ->sortable()
+                    ->icon('heroicon-o-user'),
+                TextColumn::make('email')
+                    ->searchable(),
+                BadgeColumn::make('gender')
+                    ->colors([
+                        'primary' => 'male',
+                        'success' => 'female',
+                        'warning' => 'other',
+                    ]),
+                TextColumn::make('number')
+                    ->label('Phone Number')
+                    ->searchable(),
+                TextColumn::make('address')
+                    ->searchable()
+                    ->limit(30),
+                TextColumn::make('city')
+                    ->searchable(),
+                TextColumn::make('state')
+                    ->searchable(),
+                TextColumn::make('dob')
+                    ->label('Date of Birth')
+                    ->date()
+                    ->sortable(),
+                TextColumn::make('degree')
+                    ->searchable(),
+                TextColumn::make('specialization')
+                    ->searchable(),
+                TextColumn::make('college_name')
+                    ->searchable(),
+                TextColumn::make('education_level')
+                    ->searchable(),
+                TextColumn::make('highest_education')
+                    ->searchable(),
+                TextColumn::make('school_medium')
+                    ->searchable(),
+                TextColumn::make('passing_marks')
+                    ->searchable(),
+                IconColumn::make('currently_pursuing')
+                    ->boolean()
+                    ->label('Currently Pursuing'),
+                IconColumn::make('pursuing')
+                    ->boolean()
+                    ->label('Pursuing'),
+                TextColumn::make('complete_years')
+                    ->label('Graduation Year')
+                    ->sortable(),
+                TextColumn::make('complete_month')
+                    ->label('Graduation Month'),
+                TextColumn::make('english_level')
+                    ->label('English Level'),
+                TextColumn::make('job_title')
+                    ->searchable(),
+                TextColumn::make('company_name')
+                    ->searchable(),
+                TextColumn::make('experience_type')
+                    ->searchable(),
+                TextColumn::make('employment_type')
+                    ->searchable(),
+                TextColumn::make('preferred_language')
+                    ->searchable(),
+                TextColumn::make('preferred_job_titles')
+                    ->formatStateUsing(fn($state) => is_array($state) ? implode(', ', $state) : $state)
+                    ->limit(25),
+                TextColumn::make('preferred_locations')
+                    ->formatStateUsing(fn($state) => is_array($state) ? implode(', ', $state) : $state)
+                    ->limit(25),
+                TextColumn::make('preferred_languages')
+                    ->formatStateUsing(fn($state) => is_array($state) ? implode(', ', $state) : $state)
+                    ->limit(25),
+                TextColumn::make('current_salary')
+                    ->sortable(),
+                TextColumn::make('notice_period')
+                    ->searchable(),
+                IconColumn::make('is_working')
+                    ->boolean()
+                    ->label('Is Working'),
+                IconColumn::make('prefers_night_shift')
+                    ->boolean()
+                    ->label('Night Shift')
+                    ->trueIcon('heroicon-o-moon')
+                    ->falseIcon('heroicon-o-x-circle'),
+                IconColumn::make('prefers_day_shift')
+                    ->boolean()
+                    ->label('Day Shift')
+                    ->trueIcon('heroicon-o-sun')
+                    ->falseIcon('heroicon-o-x-circle'),
+                IconColumn::make('work_from_home')
+                    ->boolean()
+                    ->label('WFH')
+                    ->trueIcon('heroicon-o-home')
+                    ->falseIcon('heroicon-o-x-circle'),
+                IconColumn::make('work_from_office')
+                    ->boolean()
+                    ->label('Office')
+                    ->trueIcon('heroicon-o-building-office')
+                    ->falseIcon('heroicon-o-x-circle'),
+                IconColumn::make('field_job')
+                    ->boolean()
+                    ->label('Field Job')
+                    ->trueIcon('heroicon-o-briefcase')
+                    ->falseIcon('heroicon-o-x-circle'),
+                TextColumn::make('experience_years')
+                    ->sortable(),
+                TextColumn::make('experience_months')
+                    ->sortable(),
+                TextColumn::make('experience_level')
+                    ->searchable(),
+                TextColumn::make('start_date')
+                    ->date()
+                    ->sortable(),
+                TextColumn::make('end_date')
+                    ->date()
+                    ->sortable(),
+                TextColumn::make('resume')
+                    ->limit(25),
+                TextColumn::make('skills')
+                    ->formatStateUsing(fn($state) => is_array($state) ? implode(', ', $state) : $state)
+                    ->limit(25),
+                TextColumn::make('profile_pic')
+                    ->limit(25),
+                IconColumn::make('active_user')
+                    ->boolean()
+                    ->label('Active')
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle'),
+                IconColumn::make('doneprofile')
+                    ->boolean()
+                    ->label('Profile Done')
+                    ->trueIcon('heroicon-o-check-badge')
+                    ->falseIcon('heroicon-o-x-circle'),
+                TextColumn::make('total_jobs_applied')
+                    ->label('Applied')
+                    ->sortable(),
+                TextColumn::make('total_job_views')
+                    ->label('Views')
+                    ->sortable(),
+                TextColumn::make('last_login')
+                    ->dateTime()
+                    ->sortable(),
+                TextColumn::make('created_at')
+                    ->label('Profile Created')
+                    ->dateTime()
+                    ->sortable(),
+                TextColumn::make('updated_at')
+                    ->label('Profile Updated')
+                    ->dateTime()
+                    ->sortable(),
+                TextColumn::make('otp')
+                    ->label('OTP'),
+                TextColumn::make('otp_expires_at')
+                    ->dateTime()
+                    ->sortable(),
+                TextColumn::make('token')
+                    ->limit(25),
+            ])
             ->headerActions([
                 Action::make('import')
                     ->label('Import Candidates')
@@ -263,75 +415,86 @@ class CandidateResource extends Resource
                             ->label('Excel File')
                             ->disk('local')
                             ->directory('imports')
-                            ->acceptedFileTypes(['.xlsx', '.xls', '.csv'])
+                            ->acceptedFileTypes(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'text/csv'])
                             ->required(),
                     ])
                     ->action(function (array $data) {
-                        Excel::import(new CandidatesImport, $data['file']);
-                        Filament\Notifications\Notification::make()
+                        $filePath = storage_path('app/imports/' . $data['file']);
+                        Excel::import(new CandidatesImport, $filePath);
+                        \Filament\Notifications\Notification::make()
                             ->title('Import Successful')
                             ->success()
                             ->send();
                     }),
 
+                Action::make('export_template')
+                    ->label('Download Excel Template')
+                    ->action(function () {
+                        $query = Candidate::query();
+                        $export = new CandidateTemplateExport($query);
+                        return Excel::download($export, 'candidates_template.xlsx');
+                    })
+                    ->color('success'),
+
                 ExportAction::make('export')
                     ->label('Export Candidates')
                     ->exports([
-                        ExcelExport::make()->fromTable(),
+                        ExcelExport::make()
+                            ->fromTable()
+                            ->askForWriterType()
+                            ->askForFilename(),
                     ]),
-
             ])
             ->filters([
-    Tables\Filters\SelectFilter::make('degree')
-        ->options(fn () => Candidate::query()
-            ->whereNotNull('degree')
-            ->pluck('degree', 'degree')
-            ->unique()
-            ->toArray()),
+                Tables\Filters\SelectFilter::make('degree')
+                    ->options(fn () => Candidate::query()
+                        ->whereNotNull('degree')
+                        ->pluck('degree', 'degree')
+                        ->unique()
+                        ->toArray()),
 
-    Tables\Filters\SelectFilter::make('specialization')
-        ->options(fn () => Candidate::query()
-            ->whereNotNull('specialization')
-            ->pluck('specialization', 'specialization')
-            ->unique()
-            ->toArray()),
+                Tables\Filters\SelectFilter::make('specialization')
+                    ->options(fn () => Candidate::query()
+                        ->whereNotNull('specialization')
+                        ->pluck('specialization', 'specialization')
+                        ->unique()
+                        ->toArray()),
 
-    Tables\Filters\SelectFilter::make('city')
-        ->options(fn () => Candidate::query()
-            ->whereNotNull('city')
-            ->pluck('city', 'city')
-            ->unique()
-            ->toArray()),
+                Tables\Filters\SelectFilter::make('city')
+                    ->options(fn () => Candidate::query()
+                        ->whereNotNull('city')
+                        ->pluck('city', 'city')
+                        ->unique()
+                        ->toArray()),
 
-    Tables\Filters\Filter::make('experience')
-        ->form([
-            Forms\Components\TextInput::make('min_experience')->numeric(),
-            Forms\Components\TextInput::make('max_experience')->numeric(),
-        ])
-        ->query(function ($query, array $data) {
-            return $query
-                ->when($data['min_experience'], fn ($q, $val) =>
-                    $q->whereRaw('(experience_years * 12 + experience_months) >= ?', [(int)$val * 12])
-                )
-                ->when($data['max_experience'], fn ($q, $val) =>
-                    $q->whereRaw('(experience_years * 12 + experience_months) <= ?', [(int)$val * 12])
-                );
-        }),
+                Tables\Filters\Filter::make('experience')
+                    ->form([
+                        Forms\Components\TextInput::make('min_experience')->numeric(),
+                        Forms\Components\TextInput::make('max_experience')->numeric(),
+                    ])
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['min_experience'], fn ($q, $val) =>
+                                $q->whereRaw('(experience_years * 12 + experience_months) >= ?', [(int)$val * 12])
+                            )
+                            ->when($data['max_experience'], fn ($q, $val) =>
+                                $q->whereRaw('(experience_years * 12 + experience_months) <= ?', [(int)$val * 12])
+                            );
+                    }),
 
-    Tables\Filters\Filter::make('salary')
-        ->form([
-            Forms\Components\TextInput::make('min_salary')->numeric(),
-            Forms\Components\TextInput::make('max_salary')->numeric(),
-        ])
-        ->query(function ($query, array $data) {
-            return $query
-                ->when($data['min_salary'], fn ($q, $val) => $q->where('current_salary', '>=', $val))
-                ->when($data['max_salary'], fn ($q, $val) => $q->where('current_salary', '<=', $val));
-        }),
-])
+                Tables\Filters\Filter::make('salary')
+                    ->form([
+                        Forms\Components\TextInput::make('min_salary')->numeric(),
+                        Forms\Components\TextInput::make('max_salary')->numeric(),
+                    ])
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['min_salary'], fn ($q, $val) => $q->where('current_salary', '>=', $val))
+                            ->when($data['max_salary'], fn ($q, $val) => $q->where('current_salary', '<=', $val));
+                    }),
+            ])
             ->paginated([10, 25, 50, 100])
             ->actions([
-
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\ViewAction::make(),
             ])
