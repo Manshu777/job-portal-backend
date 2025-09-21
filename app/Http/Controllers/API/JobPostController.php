@@ -3,12 +3,16 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\JobPosting;
+use App\Models\JobPosting; 
+use App\Models\Candidate; 
+
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Mail;
 use App\Models\Company;
+use App\Models\JobPostingApplication;
 use App\Mail\JobPostingMail;
 use App\Mail\NewCompanyRegistered;
 use Carbon\Carbon;
@@ -16,6 +20,178 @@ use Illuminate\Support\Facades\Auth;
 class JobPostController extends Controller
 {
     
+ public function indexForEmployer($employerId)
+    {
+        // Fetch jobs belonging to the employer
+        // Assuming authentication is handled via middleware, and $employerId is validated
+        $jobs = JobPosting::where('employer_id', $employerId)->get();
+
+        // For each job, compute matches count and applications count
+        foreach ($jobs as $job) {
+            $job->matches = $this->getMatchingCandidates($job)->count();
+            $job->applications = JobPostingApplication::where('job_posting_id', $job->id)->count();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $jobs,
+        ]);
+    }
+
+    private function getMatchingCandidates(JobPosting $job)
+    {
+        $query = Candidate::query();
+
+        // Prepare filters for scopeFilter
+        $filters = [];
+
+        // Specialization (assuming degree_specialization is an array of specializations)
+        if ($job->degree_specialization) {
+            $filters['specialization'] = $job->degree_specialization;
+        }
+       
+
+        // City/Location match
+        if ($job->location) {
+            $filters['city'] = $job->location;
+        }
+
+        // Min experience (assuming total_experience_required is in years)
+        if ($job->total_experience_required) {
+            $filters['min_experience'] = $job->total_experience_required;
+        }
+
+        // Apply scope filter
+        $query->filter($filters);
+
+        // Additional filters
+
+        // Gender preference
+        if ($job->gender_preference) {
+            $query->where('gender', $job->gender_preference);
+        }
+
+        // English level (assuming exact match; adjust to '>=' if levels are numeric)
+        if ($job->english_level) {
+            $query->where('english_level', $job->english_level);
+        }
+
+        // Skills from additional_requirements (assuming it's ['skills' => ['skill1', 'skill2']])
+        $additional = $job->additional_requirements ?? [];
+        // $skills = $additional['skills'] ?? [];
+        // if (!empty($skills)) {
+        //     $query->where(function ($q) use ($skills) {
+        //         foreach ($skills as $skill) {
+        //             $q->orWhereJsonContains('skills', $skill);
+        //             // Note: json_contains is case-sensitive; lowercase if needed
+        //         }
+        //     });
+        // }
+
+        // Preferred job titles match job_title or other_job_titles
+       $jobTitles = $job->job_title;
+
+// Convert to array if it's a string
+if (!empty($jobTitles)) {
+    $jobTitles = is_array($jobTitles) ? $jobTitles : [$jobTitles]; // wrap string into array
+
+    $query->where(function ($q) use ($jobTitles) {
+        foreach ($jobTitles as $title) {
+            $q->orWhereJsonContains('preferred_job_titles', $title);
+        }
+    });
+}
+
+        // Preferred locations include job location
+        if ($job->location) {
+            $query->whereJsonContains('preferred_locations', $job->location);
+        }
+
+       
+        return $query;
+    }
+
+
+
+   public function dashboard($id)
+{
+
+    $employer = Auth::guard('employer-api')->user();
+    try {
+        // Log function entry with only scalar values
+        \Log::info('Dashboard accessed', [
+            'job_id' => $id,
+            'employer_id' => $employer->id 
+        ]);
+
+        // Fetch the job with related employer and company
+        $job = JobPosting::with(['employer'])->findOrFail($id);
+
+        // Verify the authenticated employer owns this job
+        $currentUserId = $employer->id;
+        if ($currentUserId != $job->employer_id) {
+            \Log::warning('Unauthorized access attempt to job dashboard', [
+                'job_id' => $id,
+                'employer_id' => $currentUserId,
+                'job_employer_id' => $job->employer_id
+            ]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Unauthorized access',
+            ], 403);
+        }
+
+        // Get matching candidates (limited to avoid performance issues)
+        $matches = $this->getMatchingCandidates($job)
+            ->select('id', 'full_name', 'email', 'city')
+            ->take(50)
+            ->get();
+
+        // Get applications with candidate details
+        $applications = JobPostingApplication::where('job_posting_id', $id)
+            ->with(['candidate' => function ($query) {
+                $query->select('id', 'full_name', 'email', 'city');
+            }])
+            ->get();
+
+        // Log successful data retrieval
+        \Log::info('Job dashboard data retrieved successfully', [
+            'job_id' => $id,
+            'employer_id' => $currentUserId,
+            'match_count' => $matches->count(),
+            'application_count' => $applications->count()
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'job' => $job,
+                'matches' => $matches,
+                'applications' => $applications,
+            ],
+        ], 200);
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        \Log::error('Job not found in dashboard', [
+            'job_id' => $id,
+            'employer_id' => $employer->id,
+            'error' => $e->getMessage()
+        ]);
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Job not found',
+        ], 404);
+    } catch (\Exception $e) {
+        \Log::error('Failed to fetch job dashboard data', [
+            'job_id' => $id,
+            'employer_id' => $employer->id,
+            'error' => $e->getMessage()
+        ]);
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Failed to fetch job data: ' . $e->getMessage(),
+        ], 500);
+    }
+}
  
 
     public function store(Request $request): JsonResponse

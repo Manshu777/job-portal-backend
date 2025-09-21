@@ -355,8 +355,16 @@ class CandidateController extends Controller
 
 
 
-    public function filter(Request $request)
+  public function filter(Request $request)
 {
+    // Parse comma-separated strings into arrays for multi-select fields
+    $multiFields = ['city', 'language', 'specialization', 'degree'];
+    foreach ($multiFields as $field) {
+        if ($request->has($field) && is_string($request->input($field))) {
+            $request->merge([$field => array_map('trim', explode(',', $request->input($field)))]);
+        }
+    }
+
     // 1. Validation
     $validator = Validator::make($request->all(), [
         'min_experience' => 'nullable|integer|min:0',
@@ -371,18 +379,22 @@ class CandidateController extends Controller
         'must_have_keywords' => 'nullable|string',
         'exclude_keywords'  => 'nullable|string',
         'active'         => 'nullable|in:1,0',
-        
         'min_age'        => 'nullable|integer|min:0',
         'max_age'        => 'nullable|integer|min:0',
         'gender'         => 'nullable|string|in:Male,Female,Other',
-        'degree'         => 'nullable|string',
-        'specialization' => 'nullable|string',
-        'language'       => 'nullable|string',
+        'degree'         => 'nullable|array',
+        'degree.*'       => 'string',
+        'specialization' => 'nullable|array',
+        'specialization.*' => 'string',
+        'language'       => 'nullable|array',
+        'language.*'     => 'string',
         'department'     => 'nullable|string',
-        'city'           => 'nullable|string',
-        'english_level' => 'nullable|string|in:beginner,intermediate,fluent',
+        'city'           => 'nullable|array',
+        'city.*'         => 'string',
+        'english_level'  => 'nullable|string|in:beginner,intermediate,fluent',
         'employment_type' => 'nullable|string',
         'shift_preference' => 'nullable|string|in:day,night',
+        'experience_type' => 'nullable|string|in:fresher,experienced', // Added for experience_type
         'page'           => 'nullable|integer|min:1',
         'per_page'       => 'nullable|integer|min:1|max:100',
         'number_revealed' => 'nullable|string|in:1,0,last-15-days,last-30-days,last-90-days',
@@ -451,6 +463,15 @@ class CandidateController extends Controller
         }
     }
 
+    // Handle experience_type
+    if ($experienceType = $request->input('experience_type')) {
+        if ($experienceType === 'fresher') {
+            $query->whereRaw('(experience_years * 12 + experience_months) = 0');
+        } elseif ($experienceType === 'experienced') {
+            $query->whereRaw('(experience_years * 12 + experience_months) > 0');
+        }
+    }
+
     if ($minExperience = $request->input('min_experience')) {
         $query->whereRaw('(experience_years * 12 + experience_months) >= ?', [(int)$minExperience * 12]);
     }
@@ -478,35 +499,28 @@ class CandidateController extends Controller
     if ($keywords = $request->input('must_have_keywords')) {
         $keywordArray = array_map('trim', explode(',', $keywords));
 
-        foreach ($keywordArray as $keyword) {
-            $query->where(function ($q) use ($keyword) {
-                // skills relation
-                $q->whereHas('skills', function ($sq) use ($keyword) {
-                    $sq->whereRaw('LOWER(skill_name) LIKE ?', ['%' . strtolower($keyword) . '%']);
-                })
-
-                // direct columns
-                ->orWhereRaw('LOWER(degree) LIKE ?', ['%' . strtolower($keyword) . '%'])
-                ->orWhereRaw('LOWER(specialization) LIKE ?', ['%' . strtolower($keyword) . '%'])
-                ->orWhereRaw('LOWER(job_title) LIKE ?', ['%' . strtolower($keyword) . '%'])
-                ->orWhereRaw('LOWER(job_roles) LIKE ?', ['%' . strtolower($keyword) . '%'])
-                 ->orWhereRaw('LOWER(city) LIKE ?', ['%' . strtolower($keyword) . '%'])
-                ->orWhereRaw('LOWER(state) LIKE ?', ['%' . strtolower($keyword) . '%'])
-                ->orWhereRaw('LOWER(preferred_language) LIKE ?', ['%' . strtolower($keyword) . '%'])
-             
-                //city
-
-                // preferred_job_titles is JSON/array, use JSON_SEARCH (MySQL) 
-                ->orWhereRaw("JSON_SEARCH(LOWER(JSON_EXTRACT(preferred_job_titles, '$')), 'one', ? ) IS NOT NULL", [strtolower($keyword)]);
-            });
-        }
+        $query->where(function ($q) use ($keywordArray) {
+            foreach ($keywordArray as $keyword) {
+                $q->orWhere(function ($subQuery) use ($keyword) {
+                    $subQuery->whereHas('skills', function ($sq) use ($keyword) {
+                        $sq->whereRaw('LOWER(skill_name) LIKE ?', ['%' . strtolower($keyword) . '%']);
+                    })
+                    ->orWhereRaw('LOWER(degree) LIKE ?', ['%' . strtolower($keyword) . '%'])
+                    ->orWhereRaw('LOWER(specialization) LIKE ?', ['%' . strtolower($keyword) . '%'])
+                    ->orWhereRaw('LOWER(job_title) LIKE ?', ['%' . strtolower($keyword) . '%'])
+                    ->orWhereRaw('LOWER(job_roles) LIKE ?', ['%' . strtolower($keyword) . '%'])
+                    ->orWhereRaw('LOWER(city) LIKE ?', ['%' . strtolower($keyword) . '%'])
+                    ->orWhereRaw('LOWER(preferred_language) LIKE ?', ['%' . strtolower($keyword) . '%'])
+                    ->orWhereRaw("JSON_SEARCH(LOWER(JSON_EXTRACT(preferred_job_titles, '$')), 'one', ?) IS NOT NULL", [strtolower($keyword)]);
+                });
+            }
+        });
     }
 
     if ($excludeKeywords = $request->input('exclude_keywords')) {
         $excludeArray = array_map('trim', explode(',', $excludeKeywords));
 
         $query->where(function ($q) use ($excludeArray) {
-            // Exclude from skills relation
             $q->whereDoesntHave('skills', function ($sq) use ($excludeArray) {
                 $sq->whereIn(DB::raw('LOWER(skill_name)'), array_map('strtolower', $excludeArray));
             });
@@ -514,9 +528,26 @@ class CandidateController extends Controller
             foreach ($excludeArray as $ex) {
                 $q->whereRaw('LOWER(degree) NOT LIKE ?', ['%' . strtolower($ex) . '%'])
                   ->whereRaw('LOWER(specialization) NOT LIKE ?', ['%' . strtolower($ex) . '%'])
+                  ->whereRaw('LOWER(job_title) NOT LIKE ?', ['%' . strtolower($ex) . '%'])
+                  ->whereRaw('LOWER(job_roles) NOT LIKE ?', ['%' . strtolower($ex) . '%'])
+                  ->whereRaw('LOWER(preferred_language) NOT LIKE ?', ['%' . strtolower($ex) . '%'])
                   ->whereRaw('LOWER(city) NOT LIKE ?', ['%' . strtolower($ex) . '%']);
             }
         });
+    }
+
+    // Handle degree filter
+    if ($degrees = $request->input('degree')) {
+        if (is_array($degrees)) {
+            $lowerDegrees = array_map('strtolower', $degrees);
+            if (!in_array('any', $lowerDegrees)) {
+                $query->whereIn(DB::raw('LOWER(degree)'), $lowerDegrees);
+            }
+        } else {
+            if (strtolower($degrees) !== 'any') {
+                $query->whereRaw('LOWER(degree) = ?', [strtolower($degrees)]);
+            }
+        }
     }
 
     if ($request->filled('active')) {
@@ -553,22 +584,40 @@ class CandidateController extends Controller
         $query->where('gender', $gender);
     }
 
-    if ($degree = $request->input('degree')) {
-        if (strtolower($degree) !== 'any') {
-            $query->whereRaw('LOWER(degree) = ?', [strtolower($degree)]);
+    // Handle specialization filter
+    if ($specializations = $request->input('specialization')) {
+        if (is_array($specializations)) {
+            $query->where(function ($q) use ($specializations) {
+                foreach ($specializations as $spec) {
+                    $q->orWhereRaw('LOWER(specialization) LIKE ?', ['%' . strtolower(trim($spec)) . '%']);
+                }
+            });
+        } else {
+            $query->whereRaw('LOWER(specialization) LIKE ?', ['%' . strtolower($specializations) . '%']);
         }
     }
 
-    if ($specialization = $request->input('specialization')) {
-        $query->whereRaw('LOWER(specialization) LIKE ?', ['%' . strtolower($specialization) . '%']);
+    // Handle language filter
+    if ($languages = $request->input('language')) {
+        if (is_array($languages)) {
+            $query->where(function ($q) use ($languages) {
+                foreach ($languages as $lang) {
+                    $q->orWhereRaw('LOWER(preferred_language) LIKE ?', ['%' . strtolower(trim($lang)) . '%']);
+                }
+            });
+        } else {
+            $query->whereRaw('LOWER(preferred_language) LIKE ?', ['%' . strtolower($languages) . '%']);
+        }
     }
 
-    if ($language = $request->input('language')) {
-        $query->whereRaw('LOWER(preferred_language) LIKE ?', ['%' . strtolower($language) . '%']);
-    }
-
-    if ($city = $request->input('city')) {
-        $query->whereRaw('LOWER(city) LIKE ?', ['%' . strtolower($city) . '%']);
+    // Handle city filter
+    if ($cities = $request->input('city')) {
+        if (is_array($cities)) {
+            $lowerCities = array_map(function($city) { return strtolower(trim($city)); }, $cities);
+            $query->whereIn(DB::raw('LOWER(city)'), $lowerCities);
+        } else {
+            $query->whereRaw('LOWER(city) = ?', [strtolower($cities)]);
+        }
     }
 
     if ($englishFluency = $request->input('english_level')) {
@@ -732,8 +781,6 @@ class CandidateController extends Controller
         ]
     ]);
 }
-
-
 
     public function revealNumber(Request $request)
 {

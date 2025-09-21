@@ -29,6 +29,8 @@ Route::get('/user', function (Request $request) {
 
 
 Route::prefix('v1')->group(function () {
+
+
     Route::apiResource('candidate', CandidateController::class);
      Route::get('/suggestions', [CandidateController::class, 'getSuggestions'])->name('suggestions');
     Route::get('/candidateprofile', [AuthController::class, 'profile']);
@@ -68,6 +70,13 @@ Route::prefix('v1')->group(function () {
 
     Route::delete('/jobs/{jobId}', [JobPostController::class, 'destroy']);
 
+
+    Route::get('/jobs/employer/{employerId}', [JobPostController::class, 'indexForEmployer'])
+        ->name('jobs.employer.index');
+
+    // Fetch detailed job data with matches and applications
+    Route::get('/jobs/{id}/dashboard', [JobPostController::class, 'dashboard'])
+        ->name('jobs.dashboard');
 
     
 });
