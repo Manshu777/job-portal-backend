@@ -34,6 +34,9 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    'huggingface' => [
+    'api_key' => env('HUGGINGFACE_API_KEY'),
+],
 
       'openai' => [
         'api_key' => env('OPENAI_API_KEY'),

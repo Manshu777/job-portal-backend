@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Cache;
-
+use Illuminate\Support\Facades\Log;
 class JobDescriptionController extends Controller
 {
     public function generateJobDescription(Request $request)
@@ -102,6 +102,94 @@ class JobDescriptionController extends Controller
         }
     }
 
+    
+     public function generateSkills(Request $request)
+    {
+        // Step 1: Validate input
+        $validator = Validator::make($request->all(), [
+            'jobTitle' => 'required|string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Prepare prompt
+        $formData = $request->all();
+        $prompt = "Provide a numbered list of exactly 25 skills required for a {$formData['jobTitle']} position. Format each skill as 'N. SkillName' (e.g., '1. Python', '2. JavaScript'). Do not include any introductory text, explanations, or additional content.";
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . config('services.huggingface.api_key'),
+                'Content-Type' => 'application/json',
+            ])->post('https://router.huggingface.co/v1/chat/completions', [
+                'model' => 'deepseek-ai/DeepSeek-V3.2-Exp:novita',
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'You are a helpful assistant that generates precise lists of skills for job positions.'
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => $prompt
+                    ],
+                ],
+                'temperature' => 0.7,
+                'max_tokens' => 2000,
+            ]);
+
+            if ($response->failed()) {
+                Log::error('Hugging Face Router API Request Failed: ' . $response->body());
+                return response()->json([
+                    'success' => false,
+                    'errors' => ['api' => 'API request failed: ' . $response->body()],
+                ], 500);
+            }
+
+            Log::info('Hugging Face Router API Response: ' . json_encode($response->json()));
+
+            // Extract generated text
+            $generatedText = $response->json('choices')[0]['message']['content'] ?? 'No skills generated.';
+
+            // Parse the generated text into an array of skills
+            $skills = [];
+            preg_match_all('/\d+\.\s*([^\n]+)/', $generatedText, $matches);
+            if (!empty($matches[1])) {
+                $skills = array_map('trim', $matches[1]);
+            } else {
+                // Fallback: split by lines, filter out non-skill lines
+                $lines = array_filter(array_map('trim', explode("\n", $generatedText)));
+                foreach ($lines as $line) {
+                    if (preg_match('/^\d+\.\s*(.+)/', $line, $match)) {
+                        $skills[] = trim($match[1]);
+                    }
+                }
+            }
+            $skills = array_slice($skills, 0, 50); // Ensure max 50 skills
+
+            if (empty($skills) || $skills[0] === 'No skills generated.') {
+                Log::warning('No skills generated for job title: ' . $formData['jobTitle']);
+                return response()->json([
+                    'success' => false,
+                    'errors' => ['api' => 'No skills could be generated for the provided job title.'],
+                ], 500);
+            }
+
+            return response()->json([
+                'success' => true,
+                'skills' => $skills,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('API Error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'errors' => ['api' => 'Failed to generate skills. Please try again later.'],
+            ], 500);
+        }
+    }
     public function formatJobDescriptionToHTML($text, $formData)
     {
         // Initialize sections

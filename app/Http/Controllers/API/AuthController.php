@@ -154,14 +154,29 @@ public function verifyOtp(Request $request)
 
     return response()->json($response);
 }
+public function profile(Request $request)
+    {
+        $candidate = Auth::guard('candidate-api')->user();
+        
+        if (!$candidate) {
+            return response()->json([
+                "success" => false,
+                "message" => "Candidate not found"
+            ], 404);
+        }
 
-    public function profile(Request $request)
-{
+        // Convert job_roles to array if it's a string
+        $candidateData = $candidate->toArray();
+        if (is_string($candidateData['job_roles'])) {
+            try {
+                $candidateData['job_roles'] = json_decode($candidateData['job_roles'], true) ?? [$candidateData['job_roles']];
+            } catch (\Exception $e) {
+                $candidateData['job_roles'] = [$candidateData['job_roles']]; // Fallback to array with single value
+            }
+        }
 
-       $candidate = Auth::guard('candidate-api')->user();
-    return response()->json($candidate);
-}
-
+        return response()->json($candidateData);
+    }
 
 
     public function updateEmployer(Request $request)

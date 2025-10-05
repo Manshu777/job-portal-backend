@@ -20,112 +20,166 @@ use Illuminate\Support\Facades\Auth;
 class JobPostController extends Controller
 {
     
- public function indexForEmployer($employerId)
-    {
+public function indexForEmployer($employerId)
+{
+    \Log::info('Entering indexForEmployer', [
+        'employer_id' => $employerId
+    ]);
+
+    try {
         // Fetch jobs belonging to the employer
-        // Assuming authentication is handled via middleware, and $employerId is validated
+        \Log::debug('Fetching jobs for employer', [
+            'employer_id' => $employerId
+        ]);
         $jobs = JobPosting::where('employer_id', $employerId)->get();
+        \Log::info('Jobs retrieved', [
+            'employer_id' => $employerId,
+            'job_count' => $jobs->count()
+        ]);
 
         // For each job, compute matches count and applications count
         foreach ($jobs as $job) {
-            $job->matches = $this->getMatchingCandidates($job)->count();
+            \Log::debug('Processing job for matches and applications', [
+                'job_id' => $job->id,
+                'job_title' => $job->job_title,
+                'total_experience_required' => $job->total_experience_required ?? 'Not specified'
+            ]);
+
+            $matchesQuery = $this->getMatchingCandidates($job);
+            $job->matches = $matchesQuery->count();
+            \Log::debug('Computed matches for job', [
+                'job_id' => $job->id,
+                'match_count' => $job->matches,
+                'job_title' => $job->job_title,
+                'total_experience_required' => $job->total_experience_required ?? 'Not specified'
+            ]);
+
             $job->applications = JobPostingApplication::where('job_posting_id', $job->id)->count();
+            \Log::debug('Computed applications for job', [
+                'job_id' => $job->id,
+                'application_count' => $job->applications
+            ]);
         }
+
+        \Log::info('Successfully processed jobs for employer', [
+            'employer_id' => $employerId,
+            'total_jobs' => $jobs->count()
+        ]);
 
         return response()->json([
             'status' => 'success',
             'data' => $jobs,
+        ], 200);
+    } catch (\Exception $e) {
+        \Log::error('Failed to process indexForEmployer', [
+            'employer_id' => $employerId,
+            'error' => $e->getMessage()
         ]);
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Failed to fetch jobs: ' . $e->getMessage()
+        ], 500);
     }
-
-    private function getMatchingCandidates(JobPosting $job)
-    {
-        $query = Candidate::query();
-
-        // Prepare filters for scopeFilter
-        $filters = [];
-
-        // Specialization (assuming degree_specialization is an array of specializations)
-        if ($job->degree_specialization) {
-            $filters['specialization'] = $job->degree_specialization;
-        }
-       
-
-        // City/Location match
-        if ($job->location) {
-            $filters['city'] = $job->location;
-        }
-
-        // Min experience (assuming total_experience_required is in years)
-        if ($job->total_experience_required) {
-            $filters['min_experience'] = $job->total_experience_required;
-        }
-
-        // Apply scope filter
-        $query->filter($filters);
-
-        // Additional filters
-
-        // Gender preference
-        if ($job->gender_preference) {
-            $query->where('gender', $job->gender_preference);
-        }
-
-        // English level (assuming exact match; adjust to '>=' if levels are numeric)
-        if ($job->english_level) {
-            $query->where('english_level', $job->english_level);
-        }
-
-        // Skills from additional_requirements (assuming it's ['skills' => ['skill1', 'skill2']])
-        $additional = $job->additional_requirements ?? [];
-        // $skills = $additional['skills'] ?? [];
-        // if (!empty($skills)) {
-        //     $query->where(function ($q) use ($skills) {
-        //         foreach ($skills as $skill) {
-        //             $q->orWhereJsonContains('skills', $skill);
-        //             // Note: json_contains is case-sensitive; lowercase if needed
-        //         }
-        //     });
-        // }
-
-        // Preferred job titles match job_title or other_job_titles
-       $jobTitles = $job->job_title;
-
-// Convert to array if it's a string
-if (!empty($jobTitles)) {
-    $jobTitles = is_array($jobTitles) ? $jobTitles : [$jobTitles]; // wrap string into array
-
-    $query->where(function ($q) use ($jobTitles) {
-        foreach ($jobTitles as $title) {
-            $q->orWhereJsonContains('preferred_job_titles', $title);
-        }
-    });
 }
 
-        // Preferred locations include job location
-        if ($job->location) {
-            $query->whereJsonContains('preferred_locations', $job->location);
-        }
 
-       
-        return $query;
+private function getMatchingCandidates(JobPosting $job)
+{
+    \Log::info('Entering getMatchingCandidates', [
+        'job_id' => $job->id,
+        'job_title' => $job->job_title
+    ]);
+
+    $query = Candidate::query();
+    \Log::debug('Initialized candidate query', [
+        'job_id' => $job->id
+    ]);
+
+    // Prepare filters for scopeFilter
+    $filters = [];
+    \Log::debug('Preparing filters for candidate matching', [
+        'job_id' => $job->id
+    ]);
+
+    // Job title filter
+    if ($job->job_title) {
+        $filters['job_title'] = $job->job_title;
+        \Log::debug('Added job_title filter', [
+            'job_id' => $job->id,
+            'job_title' => $job->job_title
+        ]);
+    } else {
+        \Log::debug('No job_title filter applied', [
+            'job_id' => $job->id
+        ]);
     }
 
+    // Apply scope filter
+    \Log::debug('Applying scope filter', [
+        'job_id' => $job->id,
+        'filters' => $filters
+    ]);
+    $query->filter($filters);
 
-
-   public function dashboard($id)
-{
-
-    $employer = Auth::guard('employer-api')->user();
-    try {
-        // Log function entry with only scalar values
-        \Log::info('Dashboard accessed', [
-            'job_id' => $id,
-            'employer_id' => $employer->id 
+    // Fallback: Directly apply job_title filter if scope fails
+    if (isset($filters['job_title'])) {
+        $query->where('job_title', $filters['job_title']);
+        \Log::debug('Applied direct job_title filter as fallback', [
+            'job_id' => $job->id,
+            'job_title' => $filters['job_title']
         ]);
+    }
 
+    // Log the raw SQL query for debugging
+    $sql = $query->toSql();
+    $bindings = $query->getBindings();
+    \Log::debug('Generated SQL query for matching candidates', [
+        'job_id' => $job->id,
+        'sql' => $sql,
+        'bindings' => $bindings
+    ]);
+
+    // Log sample matched candidates for debugging
+    $sampleMatches = $query->select('id', 'full_name', 'job_title')->take(10)->get();
+    \Log::debug('Sample matched candidates', [
+        'job_id' => $job->id,
+        'sample_matches' => $sampleMatches->map(function ($candidate) {
+            return [
+                'candidate_id' => $candidate->id,
+                'full_name' => $candidate->full_name,
+                'job_title' => $candidate->job_title
+            ];
+        })->toArray()
+    ]);
+
+    \Log::info('Completed getMatchingCandidates query setup', [
+        'job_id' => $job->id,
+        'filters_applied' => array_keys($filters)
+    ]);
+
+    return $query;
+}
+
+public function dashboard($id)
+{
+    $employer = Auth::guard('employer-api')->user();
+    \Log::info('Entering dashboard', [
+        'job_id' => $id,
+        'employer_id' => $employer->id
+    ]);
+
+    try {
         // Fetch the job with related employer and company
+        \Log::debug('Fetching job with relations', [
+            'job_id' => $id,
+            'employer_id' => $employer->id
+        ]);
         $job = JobPosting::with(['employer'])->findOrFail($id);
+        \Log::info('Job retrieved', [
+            'job_id' => $id,
+            'employer_id' => $employer->id,
+            'job_title' => $job->job_title,
+        ]);
 
         // Verify the authenticated employer owns this job
         $currentUserId = $employer->id;
@@ -141,18 +195,73 @@ if (!empty($jobTitles)) {
             ], 403);
         }
 
-        // Get matching candidates (limited to avoid performance issues)
-        $matches = $this->getMatchingCandidates($job)
-            ->select('id', 'full_name', 'email', 'city')
-            ->take(50)
+        // Get matching candidates (no limit)
+        \Log::debug('Fetching matching candidates', [
+            'job_id' => $id,
+            'employer_id' => $currentUserId
+        ]);
+        $matchesQuery = $this->getMatchingCandidates($job);
+        $matches = $matchesQuery->select('id', 'full_name', 'email', 'city', 'job_title','experience_level')
             ->get();
+        \Log::info('Matching candidates retrieved', [
+            'job_id' => $id,
+            'employer_id' => $currentUserId,
+            'match_count' => $matches->count()
+        ]);
+
+        // Log matched candidate details (without sensitive data)
+        if ($matches->count() > 0) {
+            \Log::debug('Matched candidate details', [
+                'job_id' => $id,
+                'candidates' => $matches->map(function ($candidate) {
+                    return [
+                        'candidate_id' => $candidate->id,
+                        'full_name' => $candidate->full_name,
+                        'job_title' => $candidate->job_title,
+                        'experience_level' => $candidate->experience_level
+
+
+                        //experience_level
+                    ];
+                })->toArray()
+            ]);
+        } else {
+            \Log::warning('No candidates matched', [
+                'job_id' => $id,
+                'job_title' => $job->job_title,
+          
+            ]);
+
+            // Log sample candidate data for debugging
+            $sampleCandidates = Candidate::select('id', 'job_title')
+                ->get();
+            \Log::debug('Sample candidate data for debugging', [
+                'job_id' => $id,
+                'sample_candidates' => $sampleCandidates->map(function ($candidate) {
+                    return [
+                        'candidate_id' => $candidate->id,
+                        'job_title' => $candidate->job_title,
+                        
+                    ];
+                })->toArray()
+            ]);
+        }
 
         // Get applications with candidate details
+        \Log::debug('Fetching applications with candidate details', [
+            'job_id' => $id,
+            'employer_id' => $currentUserId
+        ]);
         $applications = JobPostingApplication::where('job_posting_id', $id)
             ->with(['candidate' => function ($query) {
-                $query->select('id', 'full_name', 'email', 'city');
+                $query->select('id', 'full_name', 'email', 'city', 'job_title','experience_level');
             }])
             ->get();
+        \Log::info('Applications retrieved', [
+            'job_id' => $id,
+            'employer_id' => $currentUserId,
+            'application_count' => $applications->count()
+        ]);
 
         // Log successful data retrieval
         \Log::info('Job dashboard data retrieved successfully', [
@@ -192,7 +301,6 @@ if (!empty($jobTitles)) {
         ], 500);
     }
 }
- 
 
     public function store(Request $request): JsonResponse
 {

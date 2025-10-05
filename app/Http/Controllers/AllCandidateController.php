@@ -56,11 +56,11 @@ class AllCandidateController extends Controller
         'current_salary' => 'sometimes|numeric|nullable',
         // 'start_year' => 'sometimes|integer|digits:4|nullable',
         // 'start_month' => 'sometimes|string|max:20|nullable',
-        'prefers_night_shift' => 'sometimes|boolean',
-        'prefers_day_shift' => 'sometimes|boolean',
-        'work_from_home' => 'sometimes|boolean',
-        'work_from_office' => 'sometimes|boolean',
-        'skills' => 'sometimes|array|nullable',
+        'prefers_night_shift' => 'sometimes',
+        'prefers_day_shift' => 'sometimes',
+        'work_from_home' => 'sometimes',
+        'work_from_office' => 'sometimes',
+        'skills' => 'sometimes|nullable',
         'preferred_language' => 'sometimes|string|nullable',
         'password' => 'sometimes|string|min:8',
         'education_level' => 'sometimes|string|nullable',
@@ -78,7 +78,7 @@ class AllCandidateController extends Controller
 
         'preferred_languages' => 'sometimes|nullable',
         'preferred_locations' => 'sometimes|nullable', // Added
-        'profile_pic' => 'sometimes|file|mimes:jpg,jpeg,png|max:2048|nullable', // Added for image upload
+        'profile_pic' => 'sometimes|nullable', // Added for image upload
         'english_level' => 'sometimes|string|nullable',
     ]);
 

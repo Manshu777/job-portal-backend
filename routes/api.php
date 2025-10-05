@@ -19,7 +19,7 @@ use App\Http\Controllers\API\JobTitleController;
 
 use App\Http\Controllers\API\CitiesController;
 use App\Http\Controllers\API\QualificationsController;
-
+use App\Http\Controllers\API\JobApplicationController;
 
 
 Route::get('/user', function (Request $request) {
@@ -34,6 +34,13 @@ Route::prefix('v1')->group(function () {
     Route::apiResource('candidate', CandidateController::class);
      Route::get('/suggestions', [CandidateController::class, 'getSuggestions'])->name('suggestions');
     Route::get('/candidateprofile', [AuthController::class, 'profile']);
+
+
+    Route::post('/job-applications', [JobApplicationController::class, 'apply']);
+    Route::get('/get-applications', [JobApplicationController::class, 'getAppliedJobs']);
+
+//getAppliedJobs
+
     Route::get('/job/{slug}', [JobPostController::class, 'show']);
     Route::apiResource('candidate/lan', CandidateLanguageController::class);
     Route::apiResource('candidate/skills', CandidateSkillController::class);
@@ -105,6 +112,10 @@ Route::prefix('v1/qualifications')->group(function () {
     Route::get('/{qualificationId}/specializations', [QualificationsController::class, 'specializations']);
 });
 Route::post('v1/generate-job-description', [JobDescriptionController::class, 'generateJobDescription']);
+
+
+Route::post('v1/generate-skills', [JobDescriptionController::class, 'generateSkills']);
+
 Route::post("v1/createcandidate", [AllCandidateController::class, "CreateCandidate"]);
 
 Route::post("v1/updatecandidate/{token}",[AllCandidateController::class,"AddCandidateInfo"]);
