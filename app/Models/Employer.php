@@ -43,6 +43,10 @@ class Employer extends Model
     {
         return $this->hasMany(JobPosting::class);
     }
+    public function company()
+    {
+        return $this->hasOne(Company::class);
+    }
 
     public function companies()
     {

@@ -262,7 +262,7 @@ class EmployerAuthController extends Controller
     }
 
 
-    public function updateEmployer(Request $request)
+  public function updateEmployer(Request $request)
     {
         // Get the authenticated employer
         $employer = Auth::guard('employer-api')->user();
@@ -276,15 +276,16 @@ class EmployerAuthController extends Controller
 
         // Validate the request
         $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|string|max:255',
-            'company_name' => 'sometimes|string|max:255',
-            'company_location' => 'sometimes|string|max:255',
-            'contact_person' => 'sometimes|string|max:255',
-            'contact_phone' => 'sometimes|string|max:20',
-            'gst_number' => 'sometimes|string|max:15',
-            'gst_certificate' => 'sometimes|file|mimes:pdf|max:2048', // PDF, max 2MB
-            'company_pan_card' => 'sometimes|file|mimes:pdf|max:2048', // PDF, max 2MB
-            'password' => 'sometimes|string|min:6',
+            'name' => 'sometimes|string|max:255', // Employer field
+            'company_name' => 'sometimes|string|max:255', // Company field
+            'company_location' => 'sometimes|string|max:255', // Company field
+            'contact_person' => 'sometimes|string|max:255', // Company field
+            'contact_phone' => 'sometimes|string|max:20', // Company field
+            // 'gst_number' => 'sometimes|string|max:15', // Company field
+            'gst_certificate' => 'sometimes|file|mimes:pdf|max:2048', // Company field, PDF, max 2MB
+            'company_pan_card' => 'sometimes|file|mimes:pdf|max:2048', // Assuming this maps to other_certificate
+            'password' => 'sometimes|string|min:6', // Employer field
+            'contact_email' => 'sometimes|email|max:255', // Add if contact_email is in Company or Employer
         ], [
             'gst_certificate.mimes' => 'The GST certificate must be a PDF file.',
             'company_pan_card.mimes' => 'The company PAN card must be a PDF file.',
@@ -294,9 +295,12 @@ class EmployerAuthController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // Get or create the associated company
+        $company = $employer->company ?? new Company(['employer_id' => $employer->id]);
+
         // Handle file uploads
-        $gstCertificatePath = $employer->gst_certificate;
-        $companyPanCardPath = $employer->company_pan_card;
+        $gstCertificatePath = $company->gst_certificate;
+        $otherCertificatePath = $company->other_certificate; // Assuming company_pan_card maps to other_certificate
 
         if ($request->hasFile('gst_certificate') && $request->file('gst_certificate')->isValid()) {
             $filename = 'gst_' . time() . '_' . $request->file('gst_certificate')->getClientOriginalName();
@@ -305,33 +309,62 @@ class EmployerAuthController extends Controller
 
         if ($request->hasFile('company_pan_card') && $request->file('company_pan_card')->isValid()) {
             $filename = 'pan_' . time() . '_' . $request->file('company_pan_card')->getClientOriginalName();
-            $companyPanCardPath = $request->file('company_pan_card')->storeAs('documents', $filename, 'public');
+            $otherCertificatePath = $request->file('company_pan_card')->storeAs('documents', $filename, 'public');
         }
 
-        // Prepare data for update
-        $updateData = [
+        // Prepare employer data for update
+        $employerData = [
             'name' => $request->input('name', $employer->name),
-            'company_name' => $request->input('company_name', $employer->company_name),
-            'company_location' => $request->input('company_location', $employer->company_location),
-            'contact_person' => $request->input('contact_person', $employer->contact_person),
-            'contact_phone' => $request->input('contact_phone', $employer->contact_phone),
-            'gst_number' => $request->input('gst_number', $employer->gst_number),
-            'gst_certificate' => $gstCertificatePath,
-            'company_pan_card' => $companyPanCardPath,
         ];
 
         // Update password if provided
         if ($request->has('password')) {
-            $updateData['password'] = Hash::make($request->password);
+            $employerData['password'] = Hash::make($request->password);
         }
 
         // Update employer record
-        $employer->update($updateData);
+        $employer->update($employerData);
+
+        // Prepare company data for update
+        $companyData = [
+            'name' => $request->input('company_name', $company->name ?? null),
+            'company_location' => $request->input('company_location', $company->company_location ?? null),
+            'contact_person' => $request->input('contact_person', $company->contact_person ?? null),
+            'contact_phone' => $request->input('contact_phone', $company->contact_phone ?? null),
+            // 'gst_number' => $request->input('gst_number', $company->gst_number ?? null),
+            'gst_certificate' => $gstCertificatePath,
+            'other_certificate' => $otherCertificatePath, // Assuming company_pan_card maps to other_certificate
+            'contact_email' => $request->input('contact_email', $company->contact_email ?? null), // Add if needed
+        ];
+
+        // Update or create company record
+        if ($company->exists) {
+            $company->update($companyData);
+        } else {
+            $company->fill($companyData)->save();
+        }
+
+        // Load the updated company relationship
+        $employer->load('company');
+
+        // Prepare response data
+        $responseData = [
+            'id' => $employer->id,
+            'name' => $employer->name,
+            'company_name' => $employer->company ? $employer->company->name : '',
+            'company_location' => $employer->company ? $employer->company->company_location : '',
+            'contact_person' => $employer->company ? $employer->company->contact_person : '',
+            'contact_phone' => $employer->company ? $employer->company->contact_phone : '',
+            // 'gst_number' => $employer->company ? $employer->company->gst_number : '',
+            'gst_certificate' => $employer->company ? $employer->company->gst_certificate : '',
+            'company_pan_card' => $employer->company ? $employer->company->other_certificate : '', // Map to other_certificate
+            'contact_email' => $employer->company ? $employer->company->contact_email ?? '' : '', // Add if needed
+        ];
 
         return response()->json([
             'success' => true,
             'message' => 'Employer profile updated successfully',
-            'data' => $employer->fresh(), // Retrieve fresh instance to include updated data
+            'data' => $responseData,
         ], 200);
     }
 
@@ -573,10 +606,25 @@ class EmployerAuthController extends Controller
 
         $employer->resetDailyCredits();
 
+        $employer->load('company');
+
+        // Prepare the response data
+        $responseData = [
+            'id' => $employer->id,
+            'name' => $employer->name, // Adjust based on your Employer model fields
+            'company_name' => $employer->company->name,
+            'company_location' => $employer->company ? $employer->company->company_location : '',
+            'contact_person' => $employer->company ? $employer->company->contact_person : '',
+            'contact_email' => $employer->contact_email, // Use ?? for nullable fields
+            'contact_phone' => $employer->company ? $employer->company->contact_phone : '',
+            // 'gst_number' => $employer->company ? $employer->company->gst_number : '',
+        ];
+
+
         return response()->json([
             'success' => true,
             'message' => 'Employer profile retrieved successfully',
-            'data' => $employer,
+            'data' => $responseData,
         ], 200);
     }
 }
