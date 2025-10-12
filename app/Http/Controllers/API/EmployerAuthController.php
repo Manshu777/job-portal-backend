@@ -41,8 +41,8 @@ class EmployerAuthController extends Controller
             ['email' => $email],
             [
                 'otp' => $otp,
-                'expires_at' => Carbon::now()->addMinutes(10),
-                'session_token' => null, // Reset session token
+                'expires_at' => Carbon::now()->addMinutes(10)
+
             ]
         );
 
@@ -625,6 +625,159 @@ class EmployerAuthController extends Controller
             'success' => true,
             'message' => 'Employer profile retrieved successfully',
             'data' => $responseData,
+        ], 200);
+    }
+
+     public function forgotPassword(Request $request)
+    {
+        $request->validate([
+            'contact_email' => 'required|email|exists:employers,contact_email',
+        ]);
+
+        // Generate a random 6-digit OTP
+        $otp = sprintf("%06d", mt_rand(100000, 999999));
+
+        // Check if an OTP record already exists
+        $otpRecord = OtpVerification::where('email', $request->contact_email)->first();
+
+        if ($otpRecord) {
+            // Update existing OTP record
+            $otpRecord->update([
+                'otp' => $otp,
+                'expires_at' => Carbon::now()->addMinutes(10),
+                'session_token' => null,
+               
+            ]);
+        } else {
+            // Create new OTP record
+            OtpVerification::create([
+                'email' => $request->contact_email,
+                'otp' => $otp,
+                'expires_at' => Carbon::now()->addMinutes(10),
+            ]);
+        }
+
+        try {
+            // Send OTP to the user's email
+            Mail::to($request->contact_email)->send(new SendOtpMail($otp));
+            return response()->json([
+                'success' => true,
+                'message' => 'Password reset OTP sent successfully',
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send OTP',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify password reset OTP
+     */
+    public function verifyPasswordResetOtp(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'contact_email' => 'required|email|exists:employers,contact_email',
+            'otp' => 'required|numeric|digits:6',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $otpRecord = OtpVerification::where('email', $request->contact_email)
+            ->where('otp', $request->otp)
+            ->first();
+
+        if (!$otpRecord) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid OTP',
+            ], 400);
+        }
+
+        if (Carbon::now()->gt($otpRecord->expires_at)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'OTP has expired',
+            ], 400);
+        }
+
+        // Generate a reset token
+        $resetToken = Str::random(60);
+        $otpRecord->update([
+            'session_token' => $resetToken,
+            'session_token_expires_at' => Carbon::now()->addMinutes(30),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'OTP verified successfully',
+            'reset_token' => $resetToken,
+            'contact_email' => $request->contact_email,
+        ], 200);
+    }
+
+    /**
+     * Reset password
+     */
+    public function resetPassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'contact_email' => 'required|email|exists:employers,contact_email',
+            'reset_token' => 'required|string',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $otpRecord = OtpVerification::where('email', $request->contact_email)
+            ->where('session_token', $request->reset_token)
+            ->first();
+
+        // if (!$otpRecord) {
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Invalid reset token',
+        //     ], 400);
+        // }
+
+        // if (Carbon::now()->gt($otpRecord->session_token_expires_at)) {
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Reset token has expired',
+        //     ], 400);
+        // }
+
+        $employer = Employer::where('contact_email', $request->contact_email)->first();
+        if (!$employer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Employer not found',
+            ], 404);
+        }
+
+        // Update password
+        $employer->update([
+            'password' => Hash::make($request->password),
+        ]);
+
+        // Clear OTP record
+        // $otpRecord->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password reset successfully',
         ], 200);
     }
 }

@@ -54,6 +54,16 @@ Route::prefix('v1')->group(function () {
     Route::post('employer/signup', [EmployerAuthController::class, 'signup']);
     Route::post('employer/send-otp', [EmployerAuthController::class, 'sendOtp']);
 
+    // Forgot Password Routes
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('/verify-password-reset-otp', [AuthController::class, 'verifyPasswordResetOtp']);
+Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+
+ // Employer Routes
+ Route::post('/employer/forgot-password', [EmployerAuthController::class, 'forgotPassword']);
+Route::post('/employer/verify-password-reset-otp', [EmployerAuthController::class, 'verifyPasswordResetOtp']);
+Route::post('/employer/reset-password', [EmployerAuthController::class, 'resetPassword']);
+
      Route::get('/job-titles/search', [JobTitleController::class, 'search']);
     Route::post('employer/verify-otp', [EmployerAuthController::class, 'verifyOtp']);
     Route::post('employer/login', [EmployerAuthController::class, 'login']);
@@ -95,7 +105,9 @@ Route::prefix('v1/cities')->group(function () {
     Route::put('/{id}', [CitiesController::class, 'update']);
     Route::delete('/{id}', [CitiesController::class, 'destroy']);
 
-    Route::get('/search', [CitiesController::class, 'search']);
+    Route::get('/search-cities', [CitiesController::class, 'searchCities']);
+    Route::get('/search-area', [CitiesController::class, 'searchAreas']);
+
 
         Route::get('/{cityId}/locations', [CitiesController::class, 'searchLocations']);
 });
