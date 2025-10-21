@@ -85,80 +85,56 @@ public function indexForEmployer($employerId)
 
 private function getMatchingCandidates(JobPosting $job)
 {
-    \Log::info('Entering getMatchingCandidates', [
+    \Log::info('🔍 Entering getMatchingCandidates', [
         'job_id' => $job->id,
         'job_title' => $job->job_title
     ]);
 
-    $query = Candidate::query();
-    \Log::debug('Initialized candidate query', [
-        'job_id' => $job->id
-    ]);
+    // Build query
+    $query = Candidate::query()
+        ->whereRaw('LOWER(job_title) = ?', [strtolower($job->job_title)]);
 
-    // Prepare filters for scopeFilter
-    $filters = [];
-    \Log::debug('Preparing filters for candidate matching', [
-        'job_id' => $job->id
-    ]);
-
-    // Job title filter
-    if ($job->job_title) {
-        $filters['job_title'] = $job->job_title;
-        \Log::debug('Added job_title filter', [
-            'job_id' => $job->id,
-            'job_title' => $job->job_title
-        ]);
-    } else {
-        \Log::debug('No job_title filter applied', [
-            'job_id' => $job->id
-        ]);
-    }
-
-    // Apply scope filter
-    \Log::debug('Applying scope filter', [
+    // Log SQL + bindings
+    \Log::debug('🧩 Candidate matching SQL', [
         'job_id' => $job->id,
-        'filters' => $filters
-    ]);
-    $query->filter($filters);
-
-    // Fallback: Directly apply job_title filter if scope fails
-    if (isset($filters['job_title'])) {
-        $query->where('job_title', $filters['job_title']);
-        \Log::debug('Applied direct job_title filter as fallback', [
-            'job_id' => $job->id,
-            'job_title' => $filters['job_title']
-        ]);
-    }
-
-    // Log the raw SQL query for debugging
-    $sql = $query->toSql();
-    $bindings = $query->getBindings();
-    \Log::debug('Generated SQL query for matching candidates', [
-        'job_id' => $job->id,
-        'sql' => $sql,
-        'bindings' => $bindings
+        'sql' => $query->toSql(),
+        'bindings' => $query->getBindings()
     ]);
 
-    // Log sample matched candidates for debugging
-    $sampleMatches = $query->select('id', 'full_name', 'job_title')->take(10)->get();
-    \Log::debug('Sample matched candidates', [
+    // Log total count directly from DB
+    $count = $query->count();
+    \Log::info('📊 Total candidates matching exact job_title', [
         'job_id' => $job->id,
+        'job_title' => $job->job_title,
+        'match_count' => $count
+    ]);
+
+    // Log 10 random sample matches for preview
+    $sampleMatches = Candidate::whereRaw('LOWER(job_title) = ?', [strtolower($job->job_title)])
+        ->inRandomOrder()
+        ->take(10)
+        ->get(['id', 'full_name', 'job_title']);
+    
+    \Log::debug('🧾 Sample matched candidates', [
+        'job_id' => $job->id,
+        'sample_count' => $sampleMatches->count(),
         'sample_matches' => $sampleMatches->map(function ($candidate) {
             return [
-                'candidate_id' => $candidate->id,
-                'full_name' => $candidate->full_name,
+                'id' => $candidate->id,
+                'name' => $candidate->full_name,
                 'job_title' => $candidate->job_title
             ];
         })->toArray()
     ]);
 
-    \Log::info('Completed getMatchingCandidates query setup', [
+    \Log::info('✅ Completed getMatchingCandidates', [
         'job_id' => $job->id,
-        'filters_applied' => array_keys($filters)
+        'final_count' => $count
     ]);
 
-    return $query;
+    return Candidate::whereRaw('LOWER(job_title) = ?', [strtolower($job->job_title)]);
 }
+
 
 public function dashboard($id)
 {
@@ -201,8 +177,7 @@ public function dashboard($id)
             'employer_id' => $currentUserId
         ]);
         $matchesQuery = $this->getMatchingCandidates($job);
-        $matches = $matchesQuery->select('id', 'full_name', 'email', 'city', 'job_title','experience_level')
-            ->get();
+        $matches = $matchesQuery->get();
         \Log::info('Matching candidates retrieved', [
             'job_id' => $id,
             'employer_id' => $currentUserId,
@@ -252,11 +227,9 @@ public function dashboard($id)
             'job_id' => $id,
             'employer_id' => $currentUserId
         ]);
-        $applications = JobPostingApplication::where('job_posting_id', $id)
-            ->with(['candidate' => function ($query) {
-                $query->select('id', 'full_name', 'email', 'city', 'job_title','experience_level');
-            }])
-            ->get();
+       $applications = JobPostingApplication::where('job_posting_id', $id)
+    ->with(['candidate'])
+    ->get();
         \Log::info('Applications retrieved', [
             'job_id' => $id,
             'employer_id' => $currentUserId,
