@@ -463,14 +463,15 @@ class CandidateController extends Controller
         }
     }
 
-    // Handle experience_type
     if ($experienceType = $request->input('experience_type')) {
-        if ($experienceType === 'fresher') {
-            $query->whereRaw('(experience_years * 12 + experience_months) = 0');
-        } elseif ($experienceType === 'experienced') {
-            $query->whereRaw('(experience_years * 12 + experience_months) > 0');
-        }
+    if ($experienceType === 'fresher') {
+        $query->whereRaw('(experience_years * 12 + experience_months) = 0');
+    } elseif ($experienceType === 'experienced') {
+        $query->whereRaw('(experience_years * 12 + experience_months) > 0');
+        // Or include 0-experience if needed:
+        // $query->whereRaw('(experience_years * 12 + experience_months) >= 0');
     }
+}
 
     if ($minExperience = $request->input('min_experience')) {
         $query->whereRaw('(experience_years * 12 + experience_months) >= ?', [(int)$minExperience * 12]);
