@@ -90,9 +90,9 @@ class CandidateResource extends Resource
                                 ->placeholder('Highest Education'),
                             TextInput::make('school_medium')
                                 ->placeholder('School Medium'),
-                            TextInput::make('passing_marks')
-                                ->numeric()
-                                ->placeholder('Passing Marks'),
+                            // TextInput::make('passing_marks')
+                            //     ->numeric()
+                            //     ->placeholder('Passing Marks'),
                             Toggle::make('currently_pursuing')
                                 ->label('Currently Pursuing')
                                 ->default(false),
@@ -121,8 +121,7 @@ class CandidateResource extends Resource
                                 ->placeholder('Experience Type'),
                             TextInput::make('employment_type')
                                 ->placeholder('Employment Type'),
-                            TextInput::make('preferred_language')
-                                ->placeholder('Preferred Language'),
+                          
                             TagsInput::make('preferred_job_titles')
                                 ->placeholder('Preferred Job Titles')
                                 ->columnSpanFull(),
@@ -264,9 +263,9 @@ class CandidateResource extends Resource
                 TextColumn::make('number')
                     ->label('Phone Number')
                     ->searchable(),
-                TextColumn::make('address')
-                    ->searchable()
-                    ->limit(30),
+                // TextColumn::make('address')
+                //     ->searchable()
+                //     ->limit(30),
                 TextColumn::make('city')
                     ->searchable(),
                 TextColumn::make('state')
@@ -275,14 +274,16 @@ class CandidateResource extends Resource
                     ->label('Date of Birth')
                     ->date()
                     ->sortable(),
-                TextColumn::make('degree')
-                    ->searchable(),
+                // TextColumn::make('degree')
+                //     ->searchable(),
+                  TextColumn::make('education_level')
+                    ->searchable()
+                    ->label('Degree'),
                 TextColumn::make('specialization')
                     ->searchable(),
                 TextColumn::make('college_name')
                     ->searchable(),
-                TextColumn::make('education_level')
-                    ->searchable(),
+              
                 TextColumn::make('highest_education')
                     ->searchable(),
                 TextColumn::make('school_medium')

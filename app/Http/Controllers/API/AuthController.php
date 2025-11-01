@@ -13,6 +13,7 @@ use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\Mail\SendOtpMail;
 
+use App\Models\CandidateEducation;
 use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
@@ -310,30 +311,64 @@ public function verifyOtp(Request $request)
 
     return response()->json($response);
 }
-public function profile(Request $request)
+   public function profile(Request $request)
     {
+        // 1. Authenticate candidate
         $candidate = Auth::guard('candidate-api')->user();
-        
-        if (!$candidate) {
+
+        if (! $candidate) {
             return response()->json([
-                "success" => false,
-                "message" => "Candidate not found"
+                'success' => false,
+                'message' => 'Candidate not found',
             ], 404);
         }
 
-        // Convert job_roles to array if it's a string
-        $candidateData = $candidate->toArray();
-        if (is_string($candidateData['job_roles'])) {
-            try {
-                $candidateData['job_roles'] = json_decode($candidateData['job_roles'], true) ?? [$candidateData['job_roles']];
-            } catch (\Exception $e) {
-                $candidateData['job_roles'] = [$candidateData['job_roles']]; // Fallback to array with single value
+        // 2. Load ONLY educations (no experiences)
+        $candidate->load('educations');
+
+        // 3. Convert to array
+        $data = $candidate->toArray();
+
+        // ------------------------------------------------------------
+        // 4. Normalise JSON columns (skills, preferred_job_titles, job_roles)
+        // ------------------------------------------------------------
+        $jsonFields = ['skills', 'preferred_job_titles', 'job_roles'];
+
+        foreach ($jsonFields as $field) {
+            if (isset($data[$field])) {
+                if (is_array($data[$field])) {
+                    continue;
+                }
+
+                if (is_string($data[$field])) {
+                    $decoded = json_decode($data[$field], true);
+                    $data[$field] = is_array($decoded) ? $decoded : [$data[$field]];
+                } else {
+                    $data[$field] = [$data[$field]];
+                }
+            } else {
+                $data[$field] = [];
             }
         }
 
-        return response()->json($candidateData);
-    }
+        // ------------------------------------------------------------
+        // 5. Add file URLs (optional but helpful for frontend)
+        // ------------------------------------------------------------
+        if (!empty($data['profile_pic'])) {
+            $data['profile_pic_url'] = asset('storage/' . $data['profile_pic']);
+        }
+        if (!empty($data['resume'])) {
+            $data['resume_url'] = asset('storage/' . $data['resume']);
+        }
 
+        // ------------------------------------------------------------
+        // 6. Return clean payload
+        // ------------------------------------------------------------
+        return response()->json([
+            'success' => true,
+            'data'    => $data,
+        ]);
+    }
 
     public function updateEmployer(Request $request)
     {
