@@ -172,4 +172,13 @@ class Candidate extends Model
     {
         return $this->resume ? asset('storage/' . $this->resume) : null;
     }
+    public function graduation()
+{
+    return $this->educations()->where('education_type', 'graduation')->first();
+}
+
+public function postGraduation()
+{
+    return $this->educations()->where('education_type', 'post_graduation')->first();
+}
 }

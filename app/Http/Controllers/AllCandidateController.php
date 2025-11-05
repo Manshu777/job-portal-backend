@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Mockery\Undefined;
 use Illuminate\Support\Facades\Auth;
-
+use App\Models\CandidateExperience;
+use Illuminate\Support\Facades\Validator;
 class AllCandidateController extends Controller
 {
     //
@@ -23,8 +24,7 @@ class AllCandidateController extends Controller
         return response()->json($candidates);
     }
 
-
-public function AddCandidateInfo(Request $request, $token)
+    public function AddCandidateInfo(Request $request, $token)
 {
     // Get authenticated candidate
     $candidate = Auth::guard('candidate-api')->user();
@@ -36,8 +36,8 @@ public function AddCandidateInfo(Request $request, $token)
         ], 404);
     }
 
-    // === VALIDATION ===
-    $validated = $request->validate([
+    // === VALIDATION (Accept JSON strings for experiences[]) ===
+    $request->validate([
         // Personal Info
         'full_name'           => 'sometimes|string|max:255',
         'number'              => 'sometimes|string|max:20',
@@ -56,46 +56,31 @@ public function AddCandidateInfo(Request $request, $token)
         'preferred_language'  => 'sometimes|string|nullable',
         'english_level'       => 'sometimes|string|nullable',
 
-        // Experience
-        'experience_years'    => 'nullable',
-        'experience_months'   => 'nullable',
-        'experience_level'    => 'sometimes|in:Fresher,Experienced',
-        'is_working'          => 'nullable',
+        // Experience Summary
+        'experience_years'    => 'nullable|integer|min:0|max:50',
+        'experience_months'   => 'nullable|integer|min:0|max:11',
+        'experience_level'    => 'sometimes|in:Fresher,Experienced,Both',
+        'is_working'          => 'nullable|in:Yes,No',
         'notice_period'       => 'sometimes|string|nullable',
-        'job_title'           => 'sometimes|string|nullable',
-        'job_roles'           => 'sometimes|string|nullable',
-        'company_name'        => 'sometimes|string|nullable',
         'current_salary'      => 'sometimes|numeric|nullable',
-        'employment_type'     => 'sometimes|string|nullable',
-        'experience_type'     => 'sometimes|string|nullable',
+
+        // === EXPERIENCES (as JSON strings via experiences[]) ===
+        'experiences'         => 'sometimes|array',
+        'experiences.*'       => 'sometimes|string', // Accept JSON string
 
         // Education (Flat)
-        'currently_pursuing'  => 'nullable',
-        'highest_education'   => 'nullable',
-        'complete_years'      => 'nullable',
-        'complete_month'      => 'nullable',
-        'school_medium'       => 'nullable',
+        'currently_pursuing'  => 'nullable|string',
+        'highest_education'   => 'nullable|string',
 
         // === NESTED EDUCATION BLOCKS ===
-        'graduation.education_level' => 'nullable|string',
-        'graduation.specialization'  => 'nullable|string',
-        'graduation.college_name'    => 'nullable|string',
-        'graduation.complete_years'  => 'nullable|integer|min:1900|max:2100',
-        'graduation.complete_month'  => 'nullable|string',
-        'graduation.school_medium'   => 'nullable|string',
-
-        'postGraduation.education_level' => 'nullable|string',
-        'postGraduation.specialization'  => 'nullable|string',
-        'postGraduation.college_name'    => 'nullable|string',
-        'postGraduation.complete_years'  => 'nullable|integer|min:1900|max:2100',
-        'postGraduation.complete_month'  => 'nullable|string',
-        'postGraduation.school_medium'   => 'nullable|string',
+        'graduation'          => 'sometimes|json',
+        'postGraduation'      => 'sometimes|json',
 
         // Arrays (JSON)
-        'skills'               => 'sometimes',
-        'preferred_job_titles' => 'sometimes',
-        'preferred_languages'  => 'sometimes',
-        'preferred_locations'  => 'sometimes',
+        'skills'               => 'sometimes|array',
+        'preferred_job_titles' => 'sometimes|array',
+        'preferred_languages'  => 'nullable',
+        'preferred_locations'  => 'nullable',
 
         // Files
         'profile_pic' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
@@ -104,6 +89,17 @@ public function AddCandidateInfo(Request $request, $token)
         // Password
         'password'    => 'sometimes|string|min:8',
     ]);
+
+    // === PARSE NESTED EDUCATION DATA ===
+    $graduation = $request->input('graduation', []);
+    $postGraduation = $request->input('postGraduation', []);
+
+    if (is_string($graduation)) {
+        $graduation = json_decode($graduation, true) ?? [];
+    }
+    if (is_string($postGraduation)) {
+        $postGraduation = json_decode($postGraduation, true) ?? [];
+    }
 
     // === UPDATE CANDIDATE (Flat Fields) ===
     $candidate->fill([
@@ -118,23 +114,10 @@ public function AddCandidateInfo(Request $request, $token)
 
         'currently_pursuing'  => $request->currently_pursuing,
         'highest_education'   => $request->highest_education,
-        'complete_years'      => $request->complete_years,
-        'complete_month'      => $request->complete_month,
-        'school_medium'       => $request->school_medium,
 
         'experience_years'    => $request->experience_years,
         'experience_months'   => $request->experience_months,
         'experience_level'    => $request->experience_level,
-        'is_working'          => $request->is_working,
-        'notice_period'       => $request->notice_period,
-        'job_title'           => $request->job_title,
-        'job_roles'           => $request->job_roles,
-        'company_name'        => $request->company_name,
-        'current_salary'      => $request->current_salary,
-        'employment_type'     => $request->employment_type,
-        'experience_type'     => $request->experience_type,
-
-        
 
         'prefers_night_shift' => $request->filled('prefers_night_shift') ? $request->prefers_night_shift : $candidate->prefers_night_shift,
         'prefers_day_shift'   => $request->filled('prefers_day_shift') ? $request->prefers_day_shift : $candidate->prefers_day_shift,
@@ -151,30 +134,13 @@ public function AddCandidateInfo(Request $request, $token)
         'preferred_locations' => $request->has('preferred_locations') ? json_encode($request->preferred_locations) : $candidate->preferred_locations,
     ]);
 
-    // Password
+    // === PASSWORD ===
     if ($request->filled('password')) {
         $candidate->password = Hash::make($request->password);
     }
 
     $candidate->doneprofile = 1;
 
-    $graduation = $request->input('graduation');
-
-
-    $postGraduation = $request->input('postGraduation');
-
-    if (is_string($graduation)) {
-    $graduation = json_decode($graduation, true);
-}
-if (is_string($postGraduation)) {
-    $postGraduation = json_decode($postGraduation, true);
-}
-
-
-$educationData = [
-    'graduation' => $graduation ?? [],
-    'postGraduation' => $postGraduation ?? [],
-];
     // === FILE: Profile Picture ===
     if ($request->hasFile('profile_pic')) {
         if ($candidate->profile_pic) {
@@ -194,51 +160,94 @@ $educationData = [
     // === SAVE CANDIDATE ===
     $candidate->save();
 
-    // === SAVE EDUCATION BLOCKS (Graduation & Post-Graduation) ===
-    $educationData = [
-        'graduation' => $request->input('graduation', []),
-        'postGraduation' => $request->input('postGraduation', []),
-    ];
+    // === SAVE EDUCATION BLOCKS ===
+    foreach (['graduation', 'postGraduation'] as $type) {
+        $data = $type === 'graduation' ? $graduation : $postGraduation;
+        $educationType = $type === 'graduation' ? 'graduation' : 'post_graduation';
 
-    \Log::info('Raw graduation:', [$request->input('graduation')]);
-\Log::info('Raw postGraduation:', [$request->input('postGraduation')]);
-
-   $educationData = [
-    'graduation' => $graduation,
-    'postGraduation' => $postGraduation,
-];
-
-foreach (['graduation', 'postGraduation'] as $type) {
-    $data = $educationData[$type];
-
-    if (!empty($data['education_level'])) {
-        CandidateEducation::updateOrCreate(
-            [
-                'candidate_id' => $candidate->id,
-                'education_type' => $type === 'graduation' ? 'graduation' : 'post_graduation',
-            ],
-            [
-                'education_level' => $data['education_level'] ?? null,
-                'specialization'  => $data['specialization'] ?? null,
-                'college_name'    => $data['college_name'] ?? null,
-                'complete_years'  => $data['complete_years'] ?? null,
-                'complete_month'  => $data['complete_month'] ?? null,
-                'school_medium'   => $data['school_medium'] ?? null,
-            ]
-        );
+        if (!empty($data['education_level'])) {
+            CandidateEducation::updateOrCreate(
+                [
+                    'candidate_id' => $candidate->id,
+                    'education_type' => $educationType,
+                ],
+                [
+                    'education_level' => $data['education_level'] ?? null,
+                    'specialization'  => $data['specialization'] ?? null,
+                    'college_name'    => $data['college_name'] ?? null,
+                    'complete_years'  => $data['complete_years'] ?? null,
+                    'complete_month'  => $data['complete_month'] ?? null,
+                    'school_medium'   => $data['school_medium'] ?? null,
+                ]
+            );
+        }
     }
-}
 
-    // === OPTIONAL: Sync flat education fields from Graduation ===
-    if ($grad = $candidate->graduation) {
-        $candidate->updateQuietly([
-            'education_level' => $grad->education_level,
-            'specialization'  => $grad->specialization,
-            'college_name'    => $grad->college_name,
-            'complete_years'  => $grad->complete_years,
-            'complete_month'  => $grad->complete_month,
-            'school_medium'   => $grad->school_medium,
-        ]);
+    // === HANDLE EXPERIENCES (JSON strings from experiences[]) ===
+    $rawExperiences = $request->input('experiences', []);
+    $experiences = collect($rawExperiences)
+        ->map(fn($item) => is_string($item) ? json_decode($item, true) : $item)
+        ->filter()
+        ->values()
+        ->all();
+
+    if (!empty($experiences)) {
+        // Delete old experiences
+        $candidate->experiences()->delete();
+
+        $currentJob = null;
+
+        foreach ($experiences as $exp) {
+            // Validate each experience
+            $validator = Validator::make($exp, [
+                'job_title'     => 'required|string|max:255',
+                'company_name'  => 'required|string|max:255',
+                'start_date'    => 'required|date_format:Y-m',
+                'end_date'      => 'nullable|date_format:Y-m|after:start_date',
+                'is_current'    => 'sometimes|boolean',
+                'salary'        => 'nullable|numeric',
+            ]);
+
+            if ($validator->fails()) {
+                continue; // skip invalid
+            }
+
+            $experience = $candidate->experiences()->create([
+                'job_title'     => $exp['job_title'],
+                'company_name'  => $exp['company_name'],
+                'start_date'    => $exp['start_date'],
+                'end_date'      => $exp['is_current'] ?? false ? null : ($exp['end_date'] ?? null),
+                'is_current'    => $exp['is_current'] ?? false,
+                'salary'        => $exp['salary'] ?? null,
+            ]);
+
+            if ($exp['is_current'] ?? false) {
+                $currentJob = $experience;
+            }
+        }
+
+        // === UPDATE SUMMARY FIELDS FROM CURRENT JOB ===
+        if ($currentJob) {
+            $candidate->update([
+                'job_title'       => $currentJob->job_title,
+                'company_name'    => $currentJob->company_name,
+                'current_salary'  => $currentJob->salary,
+                'is_working'      => 'Yes',
+            ]);
+        } else {
+            $candidate->update([
+                'job_title'       => null,
+                'company_name'    => null,
+                'current_salary'  => null,
+                'is_working'      => 'No',
+            ]);
+        }
+    }
+
+    // === SYNC NOTICE PERIOD ===
+    if ($candidate->is_working === 'Yes' && $request->filled('notice_period')) {
+        $candidate->notice_period = $request->notice_period;
+        $candidate->save();
     }
 
     // === RESPONSE ===
@@ -247,18 +256,20 @@ foreach (['graduation', 'postGraduation'] as $type) {
         'message' => 'Candidate profile updated successfully',
         'data' => [
             'candidate' => $candidate->only([
-                'id', 'full_name', 'email', 'highest_education', 'doneprofile'
+                'id', 'full_name', 'email', 'highest_education', 'experience_level', 'doneprofile'
             ]),
-            'graduation' => $candidate->graduation ? $candidate->graduation->only([
+            'experiences' => $candidate->experiences->map->only([
+                'job_title', 'company_name', 'start_date', 'end_date', 'is_current', 'salary'
+            ]),
+            'graduation' => $candidate->educations->where('education_type', 'graduation')->first()?->only([
                 'education_level', 'specialization', 'college_name', 'complete_years', 'complete_month'
-            ]) : null,
-            'postGraduation' => $candidate->postGraduation ? $candidate->postGraduation->only([
+            ]),
+            'postGraduation' => $candidate->educations->where('education_type', 'post_graduation')->first()?->only([
                 'education_level', 'specialization', 'college_name', 'complete_years', 'complete_month'
-            ]) : null,
+            ]),
         ]
     ]);
 }
-
 
 
     public function getCandidateinfo($token){
