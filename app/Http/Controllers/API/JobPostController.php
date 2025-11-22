@@ -17,6 +17,9 @@ use App\Mail\JobPostingMail;
 use App\Mail\NewCompanyRegistered;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+
+use App\Mail\AdminNewJobPosted;
+
 class JobPostController extends Controller
 {
     
@@ -420,7 +423,7 @@ public function dashboard($id)
             'basic_requirements' => $request->basic_requirements,
             'additional_requirements' => $request->additional_requirements,
             'is_walkin_interview' => $request->is_walkin_interview ?? false,
-            'joining_fee' => $request->joining_fee,
+           'joining_fee' => $request->joining_fee,
             'joining_fee_required' => $request->joining_fee_required,
             'communication_preference' => $request->communication_preference,
             'total_experience_required' => $request->total_experience_required,
@@ -451,6 +454,18 @@ public function dashboard($id)
 
         $employer->deductCredits(1, 'job_post');
 
+        $adminEmail =  'manshu.developer@gmail.com';
+
+    $isNewCompany = $request->filled('company_name');
+    $joiningFeeText = $request->joining_fee_required === 'Yes' ? 'YES - Will charge joining fee' : 'No joining fee';
+
+      Mail::to($adminEmail)->send(new AdminNewJobPosted([
+    'employer' => $employer,
+    'jobPosting' => $jobPosting,
+    'company' => $company ?? null,
+    'isNewCompany' => $isNewCompany,
+    'joiningFeeText' => $joiningFeeText,
+]));
         return response()->json([
             'status' => 'success',
             'message' => 'Job post created successfully',
