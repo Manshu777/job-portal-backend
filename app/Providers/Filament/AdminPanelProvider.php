@@ -21,6 +21,8 @@ use Jeffgreco13\FilamentBreezy\BreezyCore;
 use ShuvroRoy\FilamentSpatieLaravelBackup\FilamentSpatieLaravelBackupPlugin;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Pxlrbt\FilamentExcel\FilamentExcelPlugin;
+use Rmsramos\Activitylog\ActivitylogPlugin;
+
 class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
@@ -31,8 +33,13 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->colors([
-                'primary' => Color::Amber,
-            ])
+    'primary' => Color::hex('#009fe3'), // Main Blue
+    'success' => Color::hex('#10b981'), // Green
+    'info'    => Color::hex('#e0f7ff'), // Soft White-Blue
+    'warning' => Color::Amber,
+    'danger'  => Color::Rose,
+])
+
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([
@@ -60,6 +67,7 @@ class AdminPanelProvider extends PanelProvider
             ->plugins([
             FilamentSpatieLaravelBackupPlugin::make(),
             FilamentShieldPlugin::make(),
+            ActivitylogPlugin::make(),
             BreezyCore::make()
                 ->myProfile(
                     shouldRegisterUserMenu: true, // Adds profile link to user menu

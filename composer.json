@@ -18,6 +18,7 @@
         "nuxtifyts/dash-stack-theme": "^1.2",
         "parallax/filament-comments": "^1.5",
         "pxlrbt/filament-excel": "^2.4",
+        "rmsramos/activitylog": "^2.0",
         "shuvroroy/filament-spatie-laravel-backup": "^2.2"
     },
     "require-dev": {
@@ -41,6 +42,8 @@
             "Tests\\": "tests/"
         }
     },
+
+    
     "scripts": {
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",

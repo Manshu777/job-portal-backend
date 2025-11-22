@@ -457,7 +457,7 @@ public function dashboard($id)
         $adminEmail =  'manshu.developer@gmail.com';
 
     $isNewCompany = $request->filled('company_name');
-    $joiningFeeText = $request->joining_fee_required === 'Yes' ? 'YES - Will charge joining fee' : 'No joining fee';
+    $joiningFeeText = $request->joining_fee == '1' ? 'YES - Will charge joining fee' : 'No joining fee';
 
       Mail::to($adminEmail)->send(new AdminNewJobPosted([
     'employer' => $employer,
