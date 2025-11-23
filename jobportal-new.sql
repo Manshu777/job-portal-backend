@@ -527,7 +527,64 @@ CREATE TABLE `employer_candidate_views` (
 --
 -- Table structure for table `employers`
 --
-
+DROP TABLE IF EXISTS `job_postings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `job_postings` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `employer_id` bigint unsigned NOT NULL,
+  `company_id` bigint unsigned DEFAULT NULL,
+  `job_title` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `slug` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `job_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `industry` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `department` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `job_role` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `location` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `latitude` float DEFAULT NULL,
+  `longitude` float DEFAULT NULL,
+  `work_location_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `compensation` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `min_salary` decimal(15,2) DEFAULT NULL,
+  `max_salary` decimal(15,2) DEFAULT NULL,
+  `incentive` decimal(15,2) DEFAULT NULL,
+  `pay_type` enum('Hourly','Salary','Per Project','Salary + Incentive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `joining_fee` tinyint(1) NOT NULL DEFAULT '0',
+  `joining_fee_required` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `basic_requirements` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `additional_requirements` json DEFAULT NULL,
+  `is_walkin_interview` tinyint(1) NOT NULL DEFAULT '0',
+  `communication_preference` enum('Call','Whatsapp','No Preference','Phone') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `total_experience_required` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `total_experience_max` int DEFAULT NULL,
+  `other_job_titles` json DEFAULT NULL,
+  `preferred_roles` json DEFAULT NULL,
+  `degree_specialization` json DEFAULT NULL,
+  `job_description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `key_responsibilities` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `required_skills` json DEFAULT NULL,
+  `job_expire_time` int NOT NULL DEFAULT '7',
+  `expired_at` timestamp NULL DEFAULT NULL,
+  `number_of_candidates_required` int NOT NULL DEFAULT '1',
+  `english_level` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `gender_preference` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `perks` json DEFAULT NULL,
+  `interview_location` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `interview_mode` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `contact_email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `contact_phone` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `not_email` tinyint(1) NOT NULL DEFAULT '0',
+  `viewed_number` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `is_verified` tinyint(1) DEFAULT '0',
+  `status` enum('active','inactive','expired','pending','rejected') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
+  `published_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `slug` (`slug`),
+  KEY `job_postings_employer_id_foreign` (`employer_id`),
+  CONSTRAINT `job_postings_employer_id_foreign` FOREIGN KEY (`employer_id`) REFERENCES `employers` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=130 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `employers`
@@ -661,64 +718,7 @@ UNLOCK TABLES;
 -- Table structure for table `job_postings`
 --
 
-DROP TABLE IF EXISTS `job_postings`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `job_postings` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `employer_id` bigint unsigned NOT NULL,
-  `company_id` bigint unsigned DEFAULT NULL,
-  `job_title` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `slug` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `job_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `industry` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `department` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `job_role` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `location` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `latitude` float DEFAULT NULL,
-  `longitude` float DEFAULT NULL,
-  `work_location_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `compensation` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `min_salary` decimal(15,2) DEFAULT NULL,
-  `max_salary` decimal(15,2) DEFAULT NULL,
-  `incentive` decimal(15,2) DEFAULT NULL,
-  `pay_type` enum('Hourly','Salary','Per Project','Salary + Incentive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `joining_fee` tinyint(1) NOT NULL DEFAULT '0',
-  `joining_fee_required` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `basic_requirements` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-  `additional_requirements` json DEFAULT NULL,
-  `is_walkin_interview` tinyint(1) NOT NULL DEFAULT '0',
-  `communication_preference` enum('Call','Whatsapp','No Preference','Phone') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `total_experience_required` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `total_experience_max` int DEFAULT NULL,
-  `other_job_titles` json DEFAULT NULL,
-  `preferred_roles` json DEFAULT NULL,
-  `degree_specialization` json DEFAULT NULL,
-  `job_description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-  `key_responsibilities` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-  `required_skills` json DEFAULT NULL,
-  `job_expire_time` int NOT NULL DEFAULT '7',
-  `expired_at` timestamp NULL DEFAULT NULL,
-  `number_of_candidates_required` int NOT NULL DEFAULT '1',
-  `english_level` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `gender_preference` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `perks` json DEFAULT NULL,
-  `interview_location` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `interview_mode` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `contact_email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `contact_phone` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `not_email` tinyint(1) NOT NULL DEFAULT '0',
-  `viewed_number` tinyint(1) NOT NULL DEFAULT '0',
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
-  `is_verified` tinyint(1) DEFAULT '0',
-  `status` enum('active','inactive','expired','pending','rejected') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
-  `published_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `slug` (`slug`),
-  KEY `job_postings_employer_id_foreign` (`employer_id`),
-  CONSTRAINT `job_postings_employer_id_foreign` FOREIGN KEY (`employer_id`) REFERENCES `employers` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=130 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
