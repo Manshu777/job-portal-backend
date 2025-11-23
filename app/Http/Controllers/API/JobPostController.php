@@ -499,7 +499,8 @@ public function dashboard($id)
  public function index(Request $request): JsonResponse
  {
        
-    $query = JobPosting::query();
+   $query = JobPosting::query()
+        ->where('is_verified', 1);
 
         if ($request->filled('job_title')) {
                     $query->where('job_title', 'like', '%' . $request->job_title . '%');
