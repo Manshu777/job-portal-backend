@@ -617,6 +617,8 @@ class EmployerAuthController extends Controller
             'contact_person' => $employer->company ? $employer->company->contact_person : '',
             'contact_email' => $employer->contact_email, // Use ?? for nullable fields
             'contact_phone' => $employer->company ? $employer->company->contact_phone : '',
+             'job_post_credits' => $employer->job_post_credits,
+               'database_credits' => $employer->database_credits,
             // 'gst_number' => $employer->company ? $employer->company->gst_number : '',
         ];
 

@@ -355,6 +355,22 @@ class CandidateController extends Controller
     }
 
 
+
+    private function maskEmail($email)
+{
+    if (!$email || !str_contains($email, '@')) {
+        return 'xxxx@xxxx.com';
+    }
+
+    [$name, $domain] = explode('@', $email);
+
+    $maskedName = substr($name, 0, 2) . str_repeat('*', max(0, strlen($name) - 2));
+    $domainPart = explode('.', $domain)[0] ?? '';
+    $maskedDomain = substr($domainPart, 0, 2) . str_repeat('*', max(0, strlen($domainPart) - 2));
+
+    return $maskedName . '@' . $maskedDomain . '.com';
+}
+
     public function filter(Request $request)
 {
     // Parse comma-separated strings into arrays for multi-select fields
@@ -408,7 +424,7 @@ class CandidateController extends Controller
     }
 
     // 2. Build Query
-    $query = Candidate::query();
+    $query = Candidate::with(['educations', 'experiences'])->select('candidates.*');
 
     // Resume filter
     if ($request->filled('has_resume')) {
@@ -631,36 +647,77 @@ class CandidateController extends Controller
 
     // Mask phone, track visits
     $employer = Auth::guard('employer-api')->user();
+    
     $candidates->getCollection()->transform(function ($candidate) use ($employer) {
-        $hasRevealed = false;
-        $profileVisited = false;
+    $numberRevealed = false;
 
-        if ($employer) {
-            $view = $candidate->employerview()->where('employer_id', $employer->id)->first();
-            $hasRevealed = $view?->pivot->number_revealed ?? false;
-            $profileVisited = $view?->pivot->profile_visited ?? false;
+    if ($employer) {
+        $view = $candidate->employerview()
+            ->where('employer_id', $employer->id)
+            ->first();
 
-            if (!$profileVisited) {
-                $candidate->employerview()->syncWithoutDetaching([
-                    $employer->id => [
-                        'profile_visited' => true,
-                        'visited_at' => now(),
-                        'number_revealed' => $hasRevealed,
-                    ]
-                ]);
-                $profileVisited = true;
-            }
+        $numberRevealed = $view?->pivot->number_revealed ?? false;
 
-            $candidate->number = $hasRevealed ? $candidate->number : 'xxxxxxx';
-        } else {
-            $candidate->number = 'xxxxxxx';
+        // Track profile visit
+        if (!$view?->pivot->profile_visited ?? true) {
+            $candidate->employerview()->syncWithoutDetaching([
+                $employer->id => [
+                    'profile_visited' => true,
+                    'visited_at' => now(),
+                ]
+            ]);
         }
 
-        $candidate->number_revealed = $hasRevealed;
-        $candidate->profile_visited = $profileVisited;
-        return $candidate;
+        if ($numberRevealed) {
+            $candidate->number = $candidate->number;
+            $candidate->email  = $candidate->email;
+        } else {
+            $candidate->number = 'XXXXXXXXXX';
+            $candidate->email  = $this->maskEmail($candidate->email);
+        }
+    } else {
+        $candidate->number = 'XXXXXXXXXX';
+        $candidate->email  = $this->maskEmail($candidate->email);
+    }
+
+    // Add these flags
+    $candidate->contact_revealed = $numberRevealed;
+    $candidate->number_revealed  = $numberRevealed;
+    $candidate->email_revealed   = $numberRevealed;
+
+    // === THIS IS THE KEY PART: Attach related data ===
+    $candidate->educations = $candidate->educations->map(function ($edu) {
+        return [
+            'education_level'   => $edu->education_level,
+            'degree'            => $edu->degree,
+            'specialization'    => $edu->specialization,
+            'institute'         => $edu->institute,
+            'year_of_passing'   => $edu->year_of_passing,
+            'education_type'    => $edu->education_type,
+            // add any other fields you want
+        ];
     });
 
+    $candidate->experiences = $candidate->experiences->map(function ($exp) {
+        return [
+            'company_name'      => $exp->company_name,
+            'job_title'         => $exp->job_title,
+            'department'        => $exp->department,
+            'start_date'        => $exp->start_date,
+            'end_date'          => $exp->end_date ?? 'Present',
+            'currently_working' => $exp->currently_working,
+            'job_description'   => $exp->job_description,
+            'skills_used'       => $exp->skills_used,
+            // add more as needed
+        ];
+    });
+
+    // Optional: Unset the relationship objects to reduce payload size
+    unset($candidate->educations_relation);
+    unset($candidate->experiences_relation);
+
+    return $candidate;
+});
     // === FACET COUNTS ===
     $candidateIds = $facetBase->pluck('id');
 
@@ -762,7 +819,7 @@ class CandidateController extends Controller
 }
 
 
-    public function revealNumber(Request $request)
+  public function revealNumber(Request $request)
 {
     $validator = Validator::make($request->all(), [
         'candidate_id' => 'required|integer|exists:candidates,id',
@@ -781,55 +838,55 @@ class CandidateController extends Controller
     }
 
     $candidate = Candidate::findOrFail($request->input('candidate_id'));
-    if (!$candidate->number) {
-        return response()->json(['error' => 'Candidate has no phone number'], 400);
+
+    // Optional: if candidate has no contact info at all
+    if (!$candidate->number && !$candidate->email) {
+        return response()->json(['error' => 'Candidate has no contact information'], 400);
     }
 
-    // ✅ Check if already revealed
-    $hasRevealed = $candidate->employerview()
+    // Check if already revealed (we only charge once)
+    $existing = $candidate->employerview()
         ->where('employer_id', $employer->id)
-        ->where('number_revealed', true)
-        ->exists();
+        ->first();
 
-    if ($hasRevealed) {
+    $alreadyRevealed = $existing?->pivot->number_revealed ?? false;
+
+    if ($alreadyRevealed) {
         return response()->json([
-            'message' => 'Number already revealed',
-            'number' => $candidate->number
-        ]);
-    }
-
-    try {
-        // ✅ Deduct from DATABASE credits, not job post credits
-        $minimumCreditsRequired = 1;
-        if (!$employer->hasEnoughCredits($minimumCreditsRequired, 'database')) {
-            return response()->json([
-                'error' => 'Insufficient database credits',
-                'current_database_credits' => $employer->database_credits,
-            ], 403);
-        }
-
-        // Deduct 1 database credit
-        $employer->deductCredits(1, 'database');
-
-        // Save employer-candidate relation
-        $candidate->employerview()->syncWithoutDetaching([
-            $employer->id => [
-                'number_revealed' => true,
-                'revealed_at' => now()
-            ]
-        ]);
-
-        return response()->json([
-            'message' => 'Number revealed successfully',
+            'message' => 'Contact already revealed',
             'number' => $candidate->number,
+            'email'  => $candidate->email,
             'remaining_database_credits' => $employer->database_credits,
         ]);
-
-    } catch (\Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 400);
     }
-}
 
+    // Deduct credit only ONCE
+    $minimumCreditsRequired = 1;
+    if (!$employer->hasEnoughCredits($minimumCreditsRequired, 'database')) {
+        return response()->json([
+            'error' => 'Insufficient database credits',
+            'current_database_credits' => $employer->database_credits,
+        ], 403);
+    }
+
+    // Deduct 1 credit
+    $employer->deductCredits(1, 'database');
+
+    // Reveal BOTH number and email by setting number_revealed = true
+    $candidate->employerview()->syncWithoutDetaching([
+        $employer->id => [
+            'number_revealed' => true,
+            'revealed_at'     => now(),
+        ]
+    ]);
+
+    return response()->json([
+        'message'                    => 'Contact revealed successfully (Phone + Email)',
+        'number'                     => $candidate->number,
+        'email'                      => $candidate->email,
+        'remaining_database_credits' => $employer->fresh()->database_credits, // fresh() to get updated value
+    ]);
+}
   
    
 }
