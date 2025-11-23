@@ -432,11 +432,7 @@ CREATE TABLE `companies` (
 -- Dumping data for table `companies`
 --
 
-LOCK TABLES `companies` WRITE;
-/*!40000 ALTER TABLE `companies` DISABLE KEYS */;
-INSERT INTO `companies` VALUES (27,45,'NATIONWIDE CONSULTANCY','documents/gst_1756972653_Address proof SHOP ACT LICIENCE.pdf',NULL,1,'CHANDIGARH',NULL,'7814151135','2025-09-04 07:57:33','2025-09-04 08:24:17'),(28,46,'skymore','documents/gst_1757156923_Developing a Chatbot and Analytics System for Nature & Nurture Healthcare E-Commerce Site.pdf',NULL,1,'Amabal cantt',NULL,'7988532993','2025-09-06 11:08:43','2025-09-06 11:10:52');
-/*!40000 ALTER TABLE `companies` ENABLE KEYS */;
-UNLOCK TABLES;
+
 
 --
 -- Table structure for table `courseeducations`
