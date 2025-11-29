@@ -396,6 +396,7 @@ class CandidateController extends Controller
         'exclude_keywords'  => 'nullable|string',
         'active'         => 'nullable|in:1,0',
         'min_age'        => 'nullable|integer|min:0',
+        'english_level' => 'nullable|string|in:beginner,intermediate,fluent',
         'max_age'        => 'nullable|integer|min:0',
         'gender'         => 'nullable|string|in:Male,Female,Other',
         'degree'         => 'nullable|array',
@@ -425,6 +426,7 @@ class CandidateController extends Controller
 
     // 2. Build Query
     $query = Candidate::with(['educations', 'experiences'])->select('candidates.*');
+    
 
     // Resume filter
     if ($request->filled('has_resume')) {
@@ -462,6 +464,10 @@ class CandidateController extends Controller
             $query->whereRaw('1 = 0');
         }
     }
+
+    if ($englishFluency = $request->input('english_level')) {
+    $query->whereRaw('LOWER(english_level) = ?', [strtolower($englishFluency)]);
+}
 
     // Experience type
     if ($experienceType = $request->input('experience_type')) {
