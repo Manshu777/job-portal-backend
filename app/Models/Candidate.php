@@ -21,6 +21,9 @@ class Candidate extends Model
         'city',
         'state',
 
+        'immediate_joiner',
+    'open_to_opportunities',
+
         // Education (only highest level & status)
         'currently_pursuing',
         'highest_education',

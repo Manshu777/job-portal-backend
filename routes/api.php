@@ -73,6 +73,8 @@ Route::post('/employer/reset-password', [EmployerAuthController::class, 'resetPa
     Route::post('/add-companies', [EmployerAuthController::class, 'addCompany']);
     Route::get('/companies', [EmployerAuthController::class, 'listCompanies']);
     Route::get('/getall/companies', [EmployerAuthController::class, 'getCompanies']);
+// routes/api.php
+Route::get('/job-filters-options', [JobPostController::class, 'filterOptions']);
 
     Route::post('/update-docs', [EmployerAuthController::class, 'update_docs']);
     Route::middleware('auth:sanctum')->post('employer/update', [EmployerAuthController::class, 'updateEmployer']);
@@ -107,6 +109,9 @@ Route::prefix('v1/cities')->group(function () {
 
     Route::get('/search-cities', [CitiesController::class, 'searchCities']);
     Route::get('/search-area', [CitiesController::class, 'searchAreas']);
+    Route::get('/search-area-company', [CitiesController::class, 'searchAreaCompany']);
+
+    //searchAreaCompany
 
 
         Route::get('/{cityId}/locations', [CitiesController::class, 'searchLocations']);

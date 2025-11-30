@@ -36,7 +36,7 @@
                             </tr>
                             <tr>
                                 <td style="font-weight:bold; padding:6px 0;">Email:</td>
-                                <td>{{ $employer->email }}</td>
+                                <td>{{ $employer->contact_email }}</td>
                             </tr>
                         </table>
 

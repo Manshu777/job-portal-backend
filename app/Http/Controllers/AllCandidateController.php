@@ -77,14 +77,14 @@ class AllCandidateController extends Controller
         'postGraduation'      => 'sometimes|json',
 
         // Arrays (JSON)
-        'skills'               => 'sometimes|array',
-        'preferred_job_titles' => 'sometimes|array',
+        'skills'               => 'nullable',
+        'preferred_job_titles' => 'nullable',
         'preferred_languages'  => 'nullable',
         'preferred_locations'  => 'nullable',
 
         // Files
-        'profile_pic' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
-        'resume'      => 'nullable|mimes:pdf|max:5120',
+        'profile_pic' => 'nullable',
+        'resume'      => 'nullable',
 
         // Password
         'password'    => 'sometimes|string|min:8',
@@ -126,6 +126,12 @@ class AllCandidateController extends Controller
 
         'english_level'       => $request->english_level,
         'preferred_language'  => $request->preferred_language,
+        'immediate_joiner' => $request->has('immediate_joiner') 
+        ? $request->boolean('immediate_joiner') 
+        : $candidate->immediate_joiner,
+    'open_to_opportunities' => $request->has('open_to_opportunities')
+        ? $request->boolean('open_to_opportunities')
+        : $candidate->open_to_opportunities,
 
         // JSON Arrays
         'skills'              => $request->has('skills') ? json_encode($request->skills) : $candidate->skills,

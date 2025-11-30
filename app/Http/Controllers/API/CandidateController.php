@@ -504,19 +504,15 @@ class CandidateController extends Controller
     // Must-have keywords
 
       if ($keywords = $request->input('must_have_keywords')) {
-    $keywordArray = array_filter(array_map('trim', explode(',', $keywords)));
+      $keywordArray = array_filter(array_map('trim', explode(',', $keywords)));
 
     foreach ($keywordArray as $keyword) {
         $like = '%' . strtolower($keyword) . '%';
 
         $query->where(function ($sq) use ($like) {
-            $sq->whereHas('skills', fn($s) => $s->whereRaw('LOWER(skill_name) LIKE ?', [$like]))
-               ->orWhereRaw('LOWER(degree) LIKE ?', [$like])
-               ->orWhereRaw('LOWER(specialization) LIKE ?', [$like])
+              $sq->whereHas('skills', fn($s) => $s->whereRaw('LOWER(skill_name) LIKE ?', [$like]))
                ->orWhereRaw('LOWER(job_title) LIKE ?', [$like])
                ->orWhereRaw('LOWER(job_roles) LIKE ?', [$like])
-               ->orWhereRaw('LOWER(city) LIKE ?', [$like])
-               ->orWhereRaw('LOWER(preferred_language) LIKE ?', [$like])
                ->orWhereRaw("JSON_SEARCH(LOWER(JSON_EXTRACT(preferred_job_titles, '$')), 'one', ?) IS NOT NULL", [$like]);
         });
     }

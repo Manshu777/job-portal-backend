@@ -182,7 +182,7 @@ class EmployerAuthController extends Controller
 
         // Notify admin about new company registration
         try {
-            Mail::to('Nwcchd14@gmail.com')->send(new NewCompanyRegistered($employer, $company));
+            Mail::to('manshu.developer@gmail.com')->send(new NewCompanyRegistered($employer, $company));
         } catch (\Exception $e) {
             Log::error('Failed to send company registration email: ' . $e->getMessage());
         }
@@ -521,7 +521,7 @@ class EmployerAuthController extends Controller
 
             // Notify admin about new company registration
             try {
-                Mail::to('Nwcchd14@gmail.com')->send(new NewCompanyRegistered($employer, $company, [
+                Mail::to('manshu.developer@gmail.com')->send(new NewCompanyRegistered($employer, $company, [
                     'needs_review' => $needsReview,
                     'review_reason' => $reviewReason,
                 ]));
@@ -620,6 +620,9 @@ class EmployerAuthController extends Controller
              'job_post_credits' => $employer->job_post_credits,
                'database_credits' => $employer->database_credits,
             // 'gst_number' => $employer->company ? $employer->company->gst_number : '',
+            'is_blocked'          => $employer->is_blocked,    // Cast to boolean
+        'is_verified'         => $employer->is_verified,   // Usually from email/phone verification
+        'remark'              => $employer->remark ?? null,       // Can be null if no remark
         ];
 
 

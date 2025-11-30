@@ -454,7 +454,7 @@ public function dashboard($id)
 
         $employer->deductCredits(1, 'job_post');
 
-        $adminEmail =  'Nwcchd14@gmail.com';
+        $adminEmail =  'manshu.developer@gmail.com';
 
     $isNewCompany = $request->filled('company_name');
     $joiningFeeText = $request->joining_fee == '1' ? 'YES - Will charge joining fee' : 'No joining fee';
@@ -495,61 +495,102 @@ public function dashboard($id)
         'data' => $jobs
     ]);
 }
-
  public function index(Request $request): JsonResponse
- {
-       
-   $query = JobPosting::query()
-        ->where('is_verified', 1);
+{
+    $query = JobPosting::query()->where('is_verified', 1);
 
-        if ($request->filled('job_title')) {
-                    $query->where('job_title', 'like', '%' . $request->job_title . '%');
-        
+    // Existing filters (keep them)
+    if ($request->filled('job_title')) {
+        $query->where('job_title', 'like', '%' . $request->job_title . '%');
+    }
+
+    if ($request->filled('total_experience_required')) {
+        $exp = array_map('trim', explode(',', $request->total_experience_required));
+        $query->whereIn('total_experience_required', $exp);
+    }
+
+    if ($request->filled('work_location_type')) {
+        $locations = array_map('trim', explode(',', $request->work_location_type));
+        $query->whereIn('work_location_type', $locations);
+    }
+
+    if ($request->filled('categories')) {
+        $categories = array_map('trim', explode(',', $request->categories));
+        $query->whereIn('category', $categories);
+    }
+
+    if ($request->filled('job_type')) {
+        $types = array_map('trim', explode(',', $request->job_type));
+        $query->whereIn('job_type', $types);
+    }
+
+    if ($request->has('date_posted')) {
+        switch ($request->date_posted) {
+            case 'last_3_days':
+                $query->where('created_at', '>=', Carbon::now()->subDays(3));
+                break;
+            case 'last_10_days':
+                $query->where('created_at', '>=', Carbon::now()->subDays(10));
+                break;
+            case 'last_30_days':
+                $query->where('created_at', '>=', Carbon::now()->subDays(30));
+                break;
         }
+    }
 
-        if ($request->filled('total_experience_required')) {
-            $exp = array_map('trim', explode(',', $request->total_experience_required));
-            $query->whereIn('total_experience_required', $exp);
-        }
+    // NEW FILTERS FROM FRONTEND
+    if ($request->filled('location')) {
+        $query->where('location', 'like', '%' . $request->location . '%');
+    }
 
-        if ($request->filled('work_location_type')) {
-            $locations = array_map('trim', explode(',', $request->work_location_type));
-            $query->whereIn('work_location_type', $locations);
-        }
+    if ($request->filled('company_name')) {
+        $query->whereHas('company', function ($q) use ($request) {
+            $q->where('name', 'like', '%' . $request->company_name . '%');
+        });
+    }
 
-        if ($request->filled('categories')) {
-            $categories = array_map('trim', explode(',', $request->categories));
-            $query->whereIn('category', $categories);
-        }
+    if ($request->filled('min_salary')) {
+        $query->where('min_salary', '>=', $request->min_salary);
+    }
 
-        if ($request->filled('job_type')) {
-            $types = array_map('trim', explode(',', $request->job_type));
-            $query->whereIn('job_type', $types);
-        }
-        if ($request->has('date_posted')) {
-            switch ($request->date_posted) {
-                case 'last_3_days':
-                    $query->where('created_at', '>=', Carbon::now()->subDays(3));
-                    break;
-                case 'last_10_days':
-                    $query->where('created_at', '>=', Carbon::now()->subDays(10));
-                    break;
-                case 'last_30_days':
-                    $query->where('created_at', '>=', Carbon::now()->subDays(30));
-                    break;
-            }
-        }
+    if ($request->filled('max_salary')) {
+        $query->where('max_salary', '<=', $request->max_salary);
+    }
 
-        
-    //     // Paginate results
-        $jobs = $query->latest()->paginate(10);
+    // Always order by latest
+    $jobs = $query->latest()->paginate(10);
 
-        return response()->json([
-            'status' => 'success',
-            'data' => $jobs
-        ]);
+    return response()->json([
+        'status' => 'success',
+        'data' => $jobs
+    ]);
 }
 
+// JobPostingController.php
+public function filterOptions(Request $request): JsonResponse
+{
+    $jobs = JobPosting::where('is_verified', 1)->get();
+
+    return response()->json([
+        'status' => 'success',
+        'data' => [
+            'job_types' => $jobs->pluck('job_type')->unique()->sort()->values(),
+            'work_location_types' => $jobs->pluck('work_location_type')->unique()->filter()->sort()->values(),
+            'locations' => $jobs->pluck('location')->unique()->filter()->sort()->values(),
+            'categories' => $jobs->pluck('category')->unique()->filter()->sort()->values(),
+            'salary_range' => [
+                'min' => $jobs->min('min_salary') ?? 0,
+                'max' => $jobs->max('max_salary') ?? 200000,
+            ],
+            'experience_levels' => $jobs->pluck('total_experience_required')
+                ->unique()
+                ->map(fn($exp) => is_numeric($exp) ? (int)$exp : null)
+                ->filter()
+                ->sort()
+                ->values(),
+        ]
+    ]);
+}
 
       public function refreshJob($jobId): JsonResponse
     {
