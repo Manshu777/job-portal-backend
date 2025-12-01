@@ -139,113 +139,67 @@ private function getMatchingCandidates(JobPosting $job)
 }
 
 
-public function dashboard($id)
+ public function dashboard($id)
 {
     $employer = Auth::guard('employer-api')->user();
-    \Log::info('Entering dashboard', [
-        'job_id' => $id,
-        'employer_id' => $employer->id
-    ]);
 
     try {
-        // Fetch the job with related employer and company
-        \Log::debug('Fetching job with relations', [
-            'job_id' => $id,
-            'employer_id' => $employer->id
-        ]);
         $job = JobPosting::with(['employer'])->findOrFail($id);
-        \Log::info('Job retrieved', [
-            'job_id' => $id,
-            'employer_id' => $employer->id,
-            'job_title' => $job->job_title,
-        ]);
 
-        // Verify the authenticated employer owns this job
-        $currentUserId = $employer->id;
-        if ($currentUserId != $job->employer_id) {
-            \Log::warning('Unauthorized access attempt to job dashboard', [
-                'job_id' => $id,
-                'employer_id' => $currentUserId,
-                'job_employer_id' => $job->employer_id
-            ]);
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Unauthorized access',
-            ], 403);
+        if ($employer->id !== $job->employer_id) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        // Get matching candidates (no limit)
-        \Log::debug('Fetching matching candidates', [
-            'job_id' => $id,
-            'employer_id' => $currentUserId
-        ]);
-        $matchesQuery = $this->getMatchingCandidates($job);
-        $matches = $matchesQuery->get();
-        \Log::info('Matching candidates retrieved', [
-            'job_id' => $id,
-            'employer_id' => $currentUserId,
-            'match_count' => $matches->count()
-        ]);
+        // 1. Matches
+        $matches = $this->getMatchingCandidates($job)->get();
 
-        // Log matched candidate details (without sensitive data)
-        if ($matches->count() > 0) {
-            \Log::debug('Matched candidate details', [
-                'job_id' => $id,
-                'candidates' => $matches->map(function ($candidate) {
-                    return [
-                        'candidate_id' => $candidate->id,
-                        'full_name' => $candidate->full_name,
-                        'job_title' => $candidate->job_title,
-                        'experience_level' => $candidate->experience_level
+        // Apply masking to matches
+        $matches = $matches->transform(function ($candidate) use ($employer) {
+            $revealed = false;
 
+            if ($employer) {
+                // Change 'employerview' to whatever your actual pivot method name is!
+                $pivot = $candidate->employerview()->where('employer_id', $employer->id)->first();
+                $revealed = $pivot?->pivot->number_revealed ?? false;
 
-                        //experience_level
-                    ];
-                })->toArray()
-            ]);
-        } else {
-            \Log::warning('No candidates matched', [
-                'job_id' => $id,
-                'job_title' => $job->job_title,
-          
-            ]);
+                // Track visit
+                if (!$pivot?->pivot->profile_visited ?? true) {
+                    $candidate->employerview()->syncWithoutDetaching([
+                        $employer->id => ['profile_visited' => true, 'visited_at' => now()]
+                    ]);
+                }
+            }
 
-            // Log sample candidate data for debugging
-            $sampleCandidates = Candidate::select('id', 'job_title')
-                ->get();
-            \Log::debug('Sample candidate data for debugging', [
-                'job_id' => $id,
-                'sample_candidates' => $sampleCandidates->map(function ($candidate) {
-                    return [
-                        'candidate_id' => $candidate->id,
-                        'job_title' => $candidate->job_title,
-                        
-                    ];
-                })->toArray()
-            ]);
-        }
+            $candidate->number = $revealed ? $candidate->number : 'XXXXXXXXXX';
+            $candidate->email  = $revealed ? $candidate->email  : $this->maskEmail($candidate->email ?? '');
 
-        // Get applications with candidate details
-        \Log::debug('Fetching applications with candidate details', [
-            'job_id' => $id,
-            'employer_id' => $currentUserId
-        ]);
-       $applications = JobPostingApplication::where('job_posting_id', $id)
-    ->with(['candidate'])
-    ->get();
-        \Log::info('Applications retrieved', [
-            'job_id' => $id,
-            'employer_id' => $currentUserId,
-            'application_count' => $applications->count()
-        ]);
+            $candidate->contact_revealed = $revealed;
+            $candidate->number_revealed  = $revealed;
+            $candidate->email_revealed   = $revealed;
 
-        // Log successful data retrieval
-        \Log::info('Job dashboard data retrieved successfully', [
-            'job_id' => $id,
-            'employer_id' => $currentUserId,
-            'match_count' => $matches->count(),
-            'application_count' => $applications->count()
-        ]);
+            return $candidate;
+        });
+
+        // 2. Applications (with candidate)
+        $applications = JobPostingApplication::where('job_posting_id', $id)
+            ->with('candidate')
+            ->get()
+            ->transform(function ($app) use ($employer) {
+                $c = $app->candidate;
+                if (!$c) return $app;
+
+                $revealed = false;
+                if ($employer) {
+                    $pivot = $c->employerview()->where('employer_id', $employer->id)->first();
+                    $revealed = $pivot?->pivot->number_revealed ?? false;
+                }
+
+                $c->number = $revealed ? $c->number : 'XXXXXXXXXX';
+                $c->email  = $revealed ? $c->email : $this->maskEmail($c->email ?? '');
+                $c->contact_revealed = $revealed;
+
+                return $app;
+            });
 
         return response()->json([
             'status' => 'success',
@@ -253,31 +207,36 @@ public function dashboard($id)
                 'job' => $job,
                 'matches' => $matches,
                 'applications' => $applications,
-            ],
-        ], 200);
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        \Log::error('Job not found in dashboard', [
-            'job_id' => $id,
-            'employer_id' => $employer->id,
-            'error' => $e->getMessage()
+            ]
         ]);
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Job not found',
-        ], 404);
+
     } catch (\Exception $e) {
-        \Log::error('Failed to fetch job dashboard data', [
+        \Log::error('Job Dashboard Crash', [
             'job_id' => $id,
-            'employer_id' => $employer->id,
-            'error' => $e->getMessage()
+            'employer_id' => $employer?->id,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
         ]);
+
         return response()->json([
             'status' => 'error',
-            'message' => 'Failed to fetch job data: ' . $e->getMessage(),
+            'message' => 'Server error',
+            'debug' => app()->environment('local') ? $e->getMessage() : null // remove in prod
         ], 500);
     }
 }
 
+// Put this method in the same controller
+private function maskEmail($email)
+{
+    if (!$email || !str_contains($email, '@')) return 'xxxx@xxxx.com';
+    [$name, $domain] = explode('@', $email);
+    $maskedName = substr($name, 0, 2) . str_repeat('*', strlen($name) - 2);
+    $domainPart = explode('.', $domain)[0];
+    $maskedDomain = substr($domainPart, 0, 2) . str_repeat('*', strlen($domainPart) - 2);
+    return $maskedName . '@' . $maskedDomain . '.com';
+}
+ 
     public function store(Request $request): JsonResponse
 {
     // Define validation rules

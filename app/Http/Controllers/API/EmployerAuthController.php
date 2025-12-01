@@ -592,46 +592,54 @@ class EmployerAuthController extends Controller
     }
 
     public function profile(Request $request)
-    {
-        // Retrieve the authenticated employer using the 'employer-api' guard
-        $employer = Auth::guard('employer-api')->user();
-  
+{
+    $employer = Auth::guard('employer-api')->user();
 
-        if (!$employer) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized',
-            ], 401);
-        }
-
-        $employer->resetDailyCredits();
-
-        $employer->load('company');
-
-        // Prepare the response data
-        $responseData = [
-            'id' => $employer->id,
-            'name' => $employer->name, // Adjust based on your Employer model fields
-            'company_name' => $employer->company->name,
-            'company_location' => $employer->company ? $employer->company->company_location : '',
-            'contact_person' => $employer->company ? $employer->company->contact_person : '',
-            'contact_email' => $employer->contact_email, // Use ?? for nullable fields
-            'contact_phone' => $employer->company ? $employer->company->contact_phone : '',
-             'job_post_credits' => $employer->job_post_credits,
-               'database_credits' => $employer->database_credits,
-            // 'gst_number' => $employer->company ? $employer->company->gst_number : '',
-            'is_blocked'          => $employer->is_blocked,    // Cast to boolean
-        'is_verified'         => $employer->is_verified,   // Usually from email/phone verification
-        'remark'              => $employer->remark ?? null,       // Can be null if no remark
-        ];
-
-
+    if (!$employer) {
         return response()->json([
-            'success' => true,
-            'message' => 'Employer profile retrieved successfully',
-            'data' => $responseData,
-        ], 200);
+            'success' => false,
+            'message' => 'Unauthorized',
+        ], 401);
     }
+
+    $employer->resetDailyCredits();
+
+    // Load company
+    $employer->load('company');
+
+    $responseData = [
+        'id' => $employer->id,
+        'name' => $employer->name,
+        'company_name' => $employer->company->name ?? '',
+        'company_location' => $employer->company->company_location ?? '',
+        'contact_person' => $employer->company->contact_person ?? '',
+        'contact_email' => $employer->contact_email,
+        'contact_phone' => $employer->company->contact_phone ?? '',
+        'job_post_credits' => $employer->job_post_credits,
+        'database_credits' => $employer->database_credits,
+        'is_blocked' => $employer->is_blocked,
+        'is_verified' => $employer->is_verified,
+        'remark' => $employer->remark,
+
+        // ⭐ Company certificates
+      'company_documents' => $employer->company ? [
+    'gst_certificate' => $employer->company->gst_certificate
+        ? asset('storage/' . $employer->company->gst_certificate)
+        : null,
+
+    'other_certificate' => $employer->company->other_certificate
+        ? url('uploads/company/' . $employer->company->other_certificate)
+        : null,
+] : null,
+
+    ];
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Employer profile retrieved successfully',
+        'data' => $responseData,
+    ], 200);
+}
 
      public function forgotPassword(Request $request)
     {
