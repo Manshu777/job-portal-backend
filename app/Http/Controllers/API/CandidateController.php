@@ -523,32 +523,28 @@ class CandidateController extends Controller
     
 
     // Exclude keywords
+     // Exclude keywords - properly exclude candidates matching any term
+if ($excludeKeywords = $request->input('exclude_keywords')) {
+    $excludeTerms = array_filter(array_map('trim', explode(',', $excludeKeywords)));
 
-     if ($excludeKeywords = $request->input('excludeclude_keywords')) {
-    $excludeArray = array_filter(array_map('trim', explode(',', $excludeKeywords)));
+    foreach ($excludeTerms as $term) {
+        $term = trim($term);
+        if ($term === '') continue;
 
-    if (!empty($excludeArray)) {
-        $query->where(function ($q) use ($excludeArray) {
-            foreach ($excludeArray as $ex) {
-                $ex = trim($ex);
-                if (empty($ex)) continue;
+        $like = '%' . strtolower($term) . '%';
 
-                $like = '%' . strtolower($ex) . '%';
-
-                $q->orWhere(function ($sq) use ($like) {
-                    $sq->whereHas('skills', fn($s) => $s->whereRaw('LOWER(skill_name) LIKE ?', [$like]))
-                       ->orWhereRaw('LOWER(degree) LIKE ?', [$like])
-                       ->orWhereRaw('LOWER(specialization) LIKE ?', [$like])
-                       ->orWhereRaw('LOWER(job_title) LIKE ?', [$like])
-                       ->orWhereRaw('LOWER(job_roles) LIKE ?', [$like])
-                       ->orWhereRaw('LOWER(city) LIKE ?', [$like])
-                       ->orWhereRaw('LOWER(preferred_language) LIKE ?', [$like])
-                       ->orWhereRaw("JSON_SEARCH(LOWER(JSON_EXTRACT(preferred_job_titles, '$')), 'one', ?) IS NOT NULL", [$like]);
-                });
-            }
+        $query->where(function ($q) use ($like) {
+            $q->whereDoesntHave('skills', function ($s) use ($like) {
+                $s->whereRaw('LOWER(skill_name) LIKE ?', [$like]);
+            })
+            ->whereRaw('COALESCE(LOWER(job_title), "") NOT LIKE ?', [$like])
+            ->whereRaw('COALESCE(LOWER(job_roles), "") NOT LIKE ?', [$like])
+            ->whereRaw('COALESCE(LOWER(city), "") NOT LIKE ?', [$like])
+            ->whereRaw("JSON_SEARCH(LOWER(COALESCE(JSON_EXTRACT(preferred_job_titles, '$'), '[]')), 'one', ?) IS NULL", [$like]);
         });
     }
 }
+
     
 
     // === EDUCATION FILTERS USING CandidateEducation ===
