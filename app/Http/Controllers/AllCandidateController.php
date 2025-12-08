@@ -89,6 +89,7 @@ class AllCandidateController extends Controller
         // Password
         'password'    => 'sometimes|string|min:8',
     ]);
+     
 
     // === PARSE NESTED EDUCATION DATA ===
     $graduation = $request->input('graduation', []);
@@ -100,6 +101,24 @@ class AllCandidateController extends Controller
     if (is_string($postGraduation)) {
         $postGraduation = json_decode($postGraduation, true) ?? [];
     }
+
+
+     \Log::info('=== AddCandidateInfo Request - Candidate ID: ' . $candidate->id . ' ===', [
+        'token'           => $token,
+        'ip'              => $request->ip(),
+        'user_agent'      => $request->userAgent(),
+        'headers'         => $request->headers->all(),
+        'all_input'       => $request->all(),                    // All input (including JSON decoded)
+        'files'           => array_map(function ($file) {
+            return [
+                'name'         => $file->getClientOriginalName(),
+                'size'         => $file->getSize(),
+                'mime'         => $file->getMimeType(),
+                'extension'    => $file->getClientOriginalExtension(),
+            ];
+        }, $request->allFiles()),
+        'raw_content'     => $request->getContent(),              // Raw JSON/body if sent as application/json
+    ]);
 
     // === UPDATE CANDIDATE (Flat Fields) ===
     $candidate->fill([
@@ -291,17 +310,35 @@ class AllCandidateController extends Controller
 
 
  public function loginbypasswod(Request $request){
-$email=$request->email;
-$getuser= Candidate::whereEmail($email)->first();
 
- if (!$getuser || !Hash::check($request->password, $getuser->password)) {
+       $email = $request->email;
+    $password = $request->password;
+
+    $candidate = Candidate::where('email', $email)->first();
+
+    if (!$candidate || !Hash::check($password, $candidate->password)) {
         return response()->json([
             "success" => false,
             "message" => "Invalid email or password"
-        ]);
+        ], 400);
     }
-    
-return response()->json(["success"=>true,"message"=>"user Logined","token"=>$getuser->token]);
+
+    // 🔥 Generate Sanctum token
+    $token = $candidate->createToken('candidate-api')->plainTextToken;
+
+    // 🔥 Store token in DB + update last login
+    $candidate->update([
+        'token' => $token,
+        'last_login' => now(),
+    ]);
+
+    return response()->json([
+        "success" => true,
+        "message" => "User logged in successfully",
+        "token" => $token,
+        "user" => $candidate
+    ]);
+
 
  }
 

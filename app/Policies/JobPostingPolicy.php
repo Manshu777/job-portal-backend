@@ -2,26 +2,28 @@
 
 namespace App\Policies;
 
-use Illuminate\Auth\Access\Response;
-use App\Models\JobPosting;
 use App\Models\User;
+use App\Models\JobPosting;
+use Illuminate\Auth\Access\HandlesAuthorization;
 
 class JobPostingPolicy
 {
+    use HandlesAuthorization;
+
     /**
      * Determine whether the user can view any models.
      */
     public function viewAny(User $user): bool
     {
-        return $user->checkPermissionTo('view-any JobPosting');
+        return $user->can('view_any_job::posting');
     }
 
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user, JobPosting $jobposting): bool
+    public function view(User $user, JobPosting $jobPosting): bool
     {
-        return $user->checkPermissionTo('view JobPosting');
+        return $user->can('view_job::posting');
     }
 
     /**
@@ -29,78 +31,78 @@ class JobPostingPolicy
      */
     public function create(User $user): bool
     {
-        return $user->checkPermissionTo('create JobPosting');
+        return $user->can('create_job::posting');
     }
 
     /**
      * Determine whether the user can update the model.
      */
-    public function update(User $user, JobPosting $jobposting): bool
+    public function update(User $user, JobPosting $jobPosting): bool
     {
-        return $user->checkPermissionTo('update JobPosting');
+        return $user->can('update_job::posting');
     }
 
     /**
      * Determine whether the user can delete the model.
      */
-    public function delete(User $user, JobPosting $jobposting): bool
+    public function delete(User $user, JobPosting $jobPosting): bool
     {
-        return $user->checkPermissionTo('delete JobPosting');
+        return $user->can('delete_job::posting');
     }
 
     /**
-     * Determine whether the user can delete any models.
+     * Determine whether the user can bulk delete.
      */
     public function deleteAny(User $user): bool
     {
-        return $user->checkPermissionTo('delete-any JobPosting');
+        return $user->can('delete_any_job::posting');
     }
 
     /**
-     * Determine whether the user can restore the model.
+     * Determine whether the user can permanently delete.
      */
-    public function restore(User $user, JobPosting $jobposting): bool
+    public function forceDelete(User $user, JobPosting $jobPosting): bool
     {
-        return $user->checkPermissionTo('restore JobPosting');
+        return $user->can('force_delete_job::posting');
     }
 
     /**
-     * Determine whether the user can restore any models.
-     */
-    public function restoreAny(User $user): bool
-    {
-        return $user->checkPermissionTo('restore-any JobPosting');
-    }
-
-    /**
-     * Determine whether the user can replicate the model.
-     */
-    public function replicate(User $user, JobPosting $jobposting): bool
-    {
-        return $user->checkPermissionTo('replicate JobPosting');
-    }
-
-    /**
-     * Determine whether the user can reorder the models.
-     */
-    public function reorder(User $user): bool
-    {
-        return $user->checkPermissionTo('reorder JobPosting');
-    }
-
-    /**
-     * Determine whether the user can permanently delete the model.
-     */
-    public function forceDelete(User $user, JobPosting $jobposting): bool
-    {
-        return $user->checkPermissionTo('force-delete JobPosting');
-    }
-
-    /**
-     * Determine whether the user can permanently delete any models.
+     * Determine whether the user can permanently bulk delete.
      */
     public function forceDeleteAny(User $user): bool
     {
-        return $user->checkPermissionTo('force-delete-any JobPosting');
+        return $user->can('force_delete_any_job::posting');
+    }
+
+    /**
+     * Determine whether the user can restore.
+     */
+    public function restore(User $user, JobPosting $jobPosting): bool
+    {
+        return $user->can('restore_job::posting');
+    }
+
+    /**
+     * Determine whether the user can bulk restore.
+     */
+    public function restoreAny(User $user): bool
+    {
+        return $user->can('restore_any_job::posting');
+    }
+
+    /**
+     * Determine whether the user can replicate.
+     */
+    public function replicate(User $user, JobPosting $jobPosting): bool
+    {
+        return $user->can('replicate_job::posting');
+    }
+
+    /**
+     * Determine whether the user can reorder.
+     */
+    public function reorder(User $user): bool
+    {
+        return $user->can('reorder_job::posting');
     }
 }

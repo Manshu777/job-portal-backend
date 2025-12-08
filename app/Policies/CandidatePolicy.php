@@ -2,18 +2,20 @@
 
 namespace App\Policies;
 
-use Illuminate\Auth\Access\Response;
-use App\Models\Candidate;
 use App\Models\User;
+use App\Models\Candidate;
+use Illuminate\Auth\Access\HandlesAuthorization;
 
 class CandidatePolicy
 {
+    use HandlesAuthorization;
+
     /**
      * Determine whether the user can view any models.
      */
     public function viewAny(User $user): bool
     {
-        return $user->checkPermissionTo('view-any Candidate');
+        return $user->can('view_any_candidate');
     }
 
     /**
@@ -21,7 +23,7 @@ class CandidatePolicy
      */
     public function view(User $user, Candidate $candidate): bool
     {
-        return $user->checkPermissionTo('view Candidate');
+        return $user->can('view_candidate');
     }
 
     /**
@@ -29,7 +31,7 @@ class CandidatePolicy
      */
     public function create(User $user): bool
     {
-        return $user->checkPermissionTo('create Candidate');
+        return $user->can('create_candidate');
     }
 
     /**
@@ -37,7 +39,7 @@ class CandidatePolicy
      */
     public function update(User $user, Candidate $candidate): bool
     {
-        return $user->checkPermissionTo('update Candidate');
+        return $user->can('update_candidate');
     }
 
     /**
@@ -45,62 +47,62 @@ class CandidatePolicy
      */
     public function delete(User $user, Candidate $candidate): bool
     {
-        return $user->checkPermissionTo('delete Candidate');
+        return $user->can('delete_candidate');
     }
 
     /**
-     * Determine whether the user can delete any models.
+     * Determine whether the user can bulk delete.
      */
     public function deleteAny(User $user): bool
     {
-        return $user->checkPermissionTo('delete-any Candidate');
+        return $user->can('delete_any_candidate');
     }
 
     /**
-     * Determine whether the user can restore the model.
-     */
-    public function restore(User $user, Candidate $candidate): bool
-    {
-        return $user->checkPermissionTo('restore Candidate');
-    }
-
-    /**
-     * Determine whether the user can restore any models.
-     */
-    public function restoreAny(User $user): bool
-    {
-        return $user->checkPermissionTo('restore-any Candidate');
-    }
-
-    /**
-     * Determine whether the user can replicate the model.
-     */
-    public function replicate(User $user, Candidate $candidate): bool
-    {
-        return $user->checkPermissionTo('replicate Candidate');
-    }
-
-    /**
-     * Determine whether the user can reorder the models.
-     */
-    public function reorder(User $user): bool
-    {
-        return $user->checkPermissionTo('reorder Candidate');
-    }
-
-    /**
-     * Determine whether the user can permanently delete the model.
+     * Determine whether the user can permanently delete.
      */
     public function forceDelete(User $user, Candidate $candidate): bool
     {
-        return $user->checkPermissionTo('force-delete Candidate');
+        return $user->can('force_delete_candidate');
     }
 
     /**
-     * Determine whether the user can permanently delete any models.
+     * Determine whether the user can permanently bulk delete.
      */
     public function forceDeleteAny(User $user): bool
     {
-        return $user->checkPermissionTo('force-delete-any Candidate');
+        return $user->can('force_delete_any_candidate');
+    }
+
+    /**
+     * Determine whether the user can restore.
+     */
+    public function restore(User $user, Candidate $candidate): bool
+    {
+        return $user->can('restore_candidate');
+    }
+
+    /**
+     * Determine whether the user can bulk restore.
+     */
+    public function restoreAny(User $user): bool
+    {
+        return $user->can('restore_any_candidate');
+    }
+
+    /**
+     * Determine whether the user can replicate.
+     */
+    public function replicate(User $user, Candidate $candidate): bool
+    {
+        return $user->can('replicate_candidate');
+    }
+
+    /**
+     * Determine whether the user can reorder.
+     */
+    public function reorder(User $user): bool
+    {
+        return $user->can('reorder_candidate');
     }
 }

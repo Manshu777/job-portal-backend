@@ -2,18 +2,20 @@
 
 namespace App\Policies;
 
-use Illuminate\Auth\Access\Response;
-use App\Models\Employer;
 use App\Models\User;
+use App\Models\Employer;
+use Illuminate\Auth\Access\HandlesAuthorization;
 
 class EmployerPolicy
 {
+    use HandlesAuthorization;
+
     /**
      * Determine whether the user can view any models.
      */
     public function viewAny(User $user): bool
     {
-        return $user->checkPermissionTo('view-any Employer');
+        return $user->can('view_any_employer');
     }
 
     /**
@@ -21,7 +23,7 @@ class EmployerPolicy
      */
     public function view(User $user, Employer $employer): bool
     {
-        return $user->checkPermissionTo('view Employer');
+        return $user->can('view_employer');
     }
 
     /**
@@ -29,7 +31,7 @@ class EmployerPolicy
      */
     public function create(User $user): bool
     {
-        return $user->checkPermissionTo('create Employer');
+        return $user->can('create_employer');
     }
 
     /**
@@ -37,7 +39,7 @@ class EmployerPolicy
      */
     public function update(User $user, Employer $employer): bool
     {
-        return $user->checkPermissionTo('update Employer');
+        return $user->can('update_employer');
     }
 
     /**
@@ -45,62 +47,62 @@ class EmployerPolicy
      */
     public function delete(User $user, Employer $employer): bool
     {
-        return $user->checkPermissionTo('delete Employer');
+        return $user->can('delete_employer');
     }
 
     /**
-     * Determine whether the user can delete any models.
+     * Determine whether the user can bulk delete.
      */
     public function deleteAny(User $user): bool
     {
-        return $user->checkPermissionTo('delete-any Employer');
+        return $user->can('delete_any_employer');
     }
 
     /**
-     * Determine whether the user can restore the model.
-     */
-    public function restore(User $user, Employer $employer): bool
-    {
-        return $user->checkPermissionTo('restore Employer');
-    }
-
-    /**
-     * Determine whether the user can restore any models.
-     */
-    public function restoreAny(User $user): bool
-    {
-        return $user->checkPermissionTo('restore-any Employer');
-    }
-
-    /**
-     * Determine whether the user can replicate the model.
-     */
-    public function replicate(User $user, Employer $employer): bool
-    {
-        return $user->checkPermissionTo('replicate Employer');
-    }
-
-    /**
-     * Determine whether the user can reorder the models.
-     */
-    public function reorder(User $user): bool
-    {
-        return $user->checkPermissionTo('reorder Employer');
-    }
-
-    /**
-     * Determine whether the user can permanently delete the model.
+     * Determine whether the user can permanently delete.
      */
     public function forceDelete(User $user, Employer $employer): bool
     {
-        return $user->checkPermissionTo('force-delete Employer');
+        return $user->can('force_delete_employer');
     }
 
     /**
-     * Determine whether the user can permanently delete any models.
+     * Determine whether the user can permanently bulk delete.
      */
     public function forceDeleteAny(User $user): bool
     {
-        return $user->checkPermissionTo('force-delete-any Employer');
+        return $user->can('force_delete_any_employer');
+    }
+
+    /**
+     * Determine whether the user can restore.
+     */
+    public function restore(User $user, Employer $employer): bool
+    {
+        return $user->can('restore_employer');
+    }
+
+    /**
+     * Determine whether the user can bulk restore.
+     */
+    public function restoreAny(User $user): bool
+    {
+        return $user->can('restore_any_employer');
+    }
+
+    /**
+     * Determine whether the user can replicate.
+     */
+    public function replicate(User $user, Employer $employer): bool
+    {
+        return $user->can('replicate_employer');
+    }
+
+    /**
+     * Determine whether the user can reorder.
+     */
+    public function reorder(User $user): bool
+    {
+        return $user->can('reorder_employer');
     }
 }

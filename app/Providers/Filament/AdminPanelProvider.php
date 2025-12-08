@@ -18,7 +18,7 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Jeffgreco13\FilamentBreezy\BreezyCore;
 use ShuvroRoy\FilamentSpatieLaravelBackup\FilamentSpatieLaravelBackupPlugin;
 use Althinect\FilamentSpatieRolesPermissions\FilamentSpatieRolesPermissionsPlugin;
-
+use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Rmsramos\Activitylog\ActivitylogPlugin;
 
 class AdminPanelProvider extends PanelProvider
@@ -57,7 +57,8 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->plugins([
                 FilamentSpatieLaravelBackupPlugin::make(),
-                FilamentSpatieRolesPermissionsPlugin::make(),
+                FilamentShieldPlugin::make(),
+                // FilamentSpatieRolesPermissionsPlugin::make(),
              
                 ActivitylogPlugin::make(),
                 BreezyCore::make()
