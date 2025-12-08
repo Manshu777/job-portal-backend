@@ -413,7 +413,7 @@ private function maskEmail($email)
 
         $employer->deductCredits(1, 'job_post');
 
-        $adminEmail =  'manshu.developer@gmail.com';
+        $adminEmail =  'Nwcchd14@gmail.com';
 
     $isNewCompany = $request->filled('company_name');
     $joiningFeeText = $request->joining_fee == '1' ? 'YES - Will charge joining fee' : 'No joining fee';
