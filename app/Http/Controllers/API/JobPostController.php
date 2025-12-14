@@ -154,52 +154,36 @@ private function getMatchingCandidates(JobPosting $job)
         $matches = $this->getMatchingCandidates($job)->get();
 
         // Apply masking to matches
-        $matches = $matches->transform(function ($candidate) use ($employer) {
-            $revealed = false;
+         $matches = $this->getMatchingCandidates($job)
+    ->with(['educations', 'experiences'])
+    ->get()
+    ->transform(function ($candidate) use ($employer) {
+        $pivot = $candidate->employerview()->where('employer_id', $employer->id)->first();
+        $revealed = $pivot?->pivot->number_revealed ?? false;
 
-            if ($employer) {
-                // Change 'employerview' to whatever your actual pivot method name is!
-                $pivot = $candidate->employerview()->where('employer_id', $employer->id)->first();
-                $revealed = $pivot?->pivot->number_revealed ?? false;
+        $candidate->number = $revealed ? $candidate->number : 'XXXXXXXXXX';
+        $candidate->email  = $revealed ? $candidate->email  : $this->maskEmail($candidate->email ?? '');
+        $candidate->contact_revealed = $revealed;
 
-                // Track visit
-                if (!$pivot?->pivot->profile_visited ?? true) {
-                    $candidate->employerview()->syncWithoutDetaching([
-                        $employer->id => ['profile_visited' => true, 'visited_at' => now()]
-                    ]);
-                }
-            }
-
-            $candidate->number = $revealed ? $candidate->number : 'XXXXXXXXXX';
-            $candidate->email  = $revealed ? $candidate->email  : $this->maskEmail($candidate->email ?? '');
-
-            $candidate->contact_revealed = $revealed;
-            $candidate->number_revealed  = $revealed;
-            $candidate->email_revealed   = $revealed;
-
-            return $candidate;
-        });
+        return $candidate;
+    });
+      
 
         // 2. Applications (with candidate)
         $applications = JobPostingApplication::where('job_posting_id', $id)
-            ->with('candidate')
-            ->get()
-            ->transform(function ($app) use ($employer) {
-                $c = $app->candidate;
-                if (!$c) return $app;
+    ->with(['candidate.educations', 'candidate.experiences'])
+    ->get()
+    ->transform(function ($app) use ($employer) {
+        $c = $app->candidate;
+        if (!$c) return $app;
 
-                $revealed = false;
-                if ($employer) {
-                    $pivot = $c->employerview()->where('employer_id', $employer->id)->first();
-                    $revealed = $pivot?->pivot->number_revealed ?? false;
-                }
+        $pivot = $c->employerview()->where('employer_id', $employer->id)->first();
+        $revealed = $pivot?->pivot->number_revealed ?? false;
 
-                $c->number = $revealed ? $c->number : 'XXXXXXXXXX';
-                $c->email  = $revealed ? $c->email : $this->maskEmail($c->email ?? '');
-                $c->contact_revealed = $revealed;
+        $c->contact_revealed = $revealed;
 
-                return $app;
-            });
+        return $app;
+    });
 
         return response()->json([
             'status' => 'success',
@@ -929,6 +913,23 @@ private function formatSalary($salary)
     // Find the job posting by slug or fail with a 404 error
     $job = JobPosting::with(['company', 'employer'])->where('slug', $slug)->firstOrFail();
 
+
+
+    $commPref = $job->communication_preference;
+
+    $communicationMap = [
+        "Yes, to myself"                    => "Yes, to myself",
+        "Yes, to other recruiter"           => "Yes, to other recruiter",
+        "No, I will contact candidates first" => "No, I will contact candidates first",
+    ];
+
+    $displayCommPref = $communicationMap[$commPref] ?? "Not specified";
+
+    // Decide whether to show contact details
+    $showContactDetails = !in_array($commPref, [
+        "No, I will contact candidates first"
+    ]);
+
     $formatted = [
         "Job Details" => [
             "Job Role"        => $job->job_role,
@@ -943,11 +944,16 @@ private function formatSalary($salary)
             "Max Salary"      => $this->formatSalary($job->max_salary),
             "Incentive"       => $this->formatSalary($job->incentive),
         ],
-        "About Company" => [
-            "Name"          => $job->company->name ?? null,
+        "About Company" =>
+        $showContactDetails ? [
+             "Name"          => $job->company->name ?? null,
             "Address"       => $job->location,
             "Contact Email" => $job->contact_email,
-            "Contact Phone" => $job->contact_phone,
+            "Contact Phone" => $job->contact_phone ?? "Not provided",
+            "How to Apply"  => "You can contact the employer directly"
+        ] : [
+            "Message" => "The employer will contact shortlisted candidates directly.",
+            "Note"    => "Contact details are hidden as per employer's preference."
         ],
         "Requirements" => [
             "Basic Requirements"     => $job->basic_requirements !== "null" ? $job->basic_requirements : null,

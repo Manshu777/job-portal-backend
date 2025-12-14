@@ -72,12 +72,18 @@ class Candidate extends Model
     ];
 
     protected $casts = [
-        'skills'               => 'array',
-        'preferred_job_titles' => 'array',
-        'preferred_languages'  => 'array',
-        'preferred_locations'  => 'array',
-        'dob'                  => 'date',
-        'doneprofile'          => 'boolean',
+       'skills'               => 'array',
+    'job_roles'            => 'array',
+    'preferred_job_titles' => 'array',
+    'preferred_languages'  => 'array',
+    'preferred_locations'  => 'array',
+    'immediate_joiner'     => 'boolean',
+    'open_to_opportunities'=> 'boolean',
+    'prefers_day_shift'    => 'boolean',
+    'prefers_night_shift'  => 'boolean',
+    'work_from_home'       => 'boolean',
+    'work_from_office'     => 'boolean',
+    'field_job'            => 'boolean',
     ];
 
     protected $hidden = [
