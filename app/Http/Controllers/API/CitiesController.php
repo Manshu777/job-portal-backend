@@ -166,12 +166,11 @@ class CitiesController extends Controller
 
     // 2️⃣ Search areas/localities inside a selected city
 
-    public function searchAreas(Request $request)
+   public function searchAreas(Request $request)
 {
     $cityName = $request->input('city');
-    $areaQuery = $request->input('query'); // User's search term for the area (e.g., "Sector 17")
+    $areaQuery = $request->input('query');
 
-    // Validate inputs
     if (!$cityName || !$areaQuery) {
         return response()->json([
             'status' => 'error',
@@ -181,7 +180,7 @@ class CitiesController extends Controller
 
     $apiKey = env('GOOGLE_MAPS_API_KEY');
 
-    // Step 1: Get the place_id and location of the city
+    // Get city center
     $cityResponse = Http::get('https://maps.googleapis.com/maps/api/place/findplacefromtext/json', [
         'input' => $cityName,
         'inputtype' => 'textquery',
@@ -198,19 +197,19 @@ class CitiesController extends Controller
         ], 404);
     }
 
-    $placeId = $cityData['candidates'][0]['place_id'];
     $cityLocation = $cityData['candidates'][0]['geometry']['location'];
     $lat = $cityLocation['lat'];
     $lng = $cityLocation['lng'];
 
-    // Step 2: Search for areas within the city using Place Autocomplete API
+    // Autocomplete with strict restriction
     $response = Http::get('https://maps.googleapis.com/maps/api/place/autocomplete/json', [
-        'input' => "$areaQuery, $cityName", // Combine area query and city name for context
+        'input' => "$areaQuery, $cityName",
         'key' => $apiKey,
-        'types' => 'sublocality|neighborhood|locality', // Include relevant area types
-        'location' => "$lat,$lng", // Bias results to the city's location
-        'radius' => 20000, // Restrict to 20km around the city center
-        'components' => 'country:in', // Restrict to India
+        'types' => 'sublocality|neighborhood|locality',
+        'location' => "$lat,$lng",
+        'radius' => 30000,         // Adjust based on city size
+        'strictbounds' => true,    // Critical for "only this city"
+        'components' => 'country:in',
     ]);
 
     $areas = $response->json();
@@ -221,7 +220,6 @@ class CitiesController extends Controller
         'areas' => $areas['predictions'] ?? [],
     ]);
 }
-
 
 
 

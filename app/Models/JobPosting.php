@@ -32,6 +32,7 @@ class JobPosting extends Model
         'job_expire_time',
         'number_of_candidates_required',
         'is_verified',
+        'interview_pref_loca',
         'english_level', // Add for englishLevel
     'gender_preference', // Add for genderPreference
     'perks', // Add for perks (as JSON)
