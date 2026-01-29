@@ -7,7 +7,8 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
-        "bezhansalleh/filament-shield": "^3.3",
+        "althinect/filament-spatie-roles-permissions": "^2.3",
+        "bezhansalleh/filament-shield": "^3.9",
         "filament/filament": "^3.3",
         "filament/widgets": "^3.3",
         "flowframe/laravel-trend": "^0.4.0",
@@ -18,7 +19,9 @@
         "nuxtifyts/dash-stack-theme": "^1.2",
         "parallax/filament-comments": "^1.5",
         "pxlrbt/filament-excel": "^2.4",
-        "shuvroroy/filament-spatie-laravel-backup": "^2.2"
+        "rmsramos/activitylog": "^2.0",
+        "shuvroroy/filament-spatie-laravel-backup": "^2.2",
+        "spatie/laravel-permission": "^6.23"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -41,6 +44,8 @@
             "Tests\\": "tests/"
         }
     },
+
+    
     "scripts": {
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",

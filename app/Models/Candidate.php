@@ -4,91 +4,105 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\CandidateEducation;
-use App\Models\CandidateExperience;
-use App\Models\CandidateSkill;
-use App\Models\CandidateLanguage;
-
-
 use Laravel\Sanctum\HasApiTokens;
+
 class Candidate extends Model
 {
+    use HasFactory, HasApiTokens;
 
-       use HasFactory,HasApiTokens;
     protected $table = 'candidates';
 
     protected $fillable = [
-       'full_name',
+        'full_name',
         'dob',
         'gender',
         'email',
         'address',
         'city',
         'state',
-        'degree',
-        'specialization',
-        'college_name',
-        'education_level',
+
+        'immediate_joiner',
+    'open_to_opportunities',
+
+        // Education (only highest level & status)
         'currently_pursuing',
         'highest_education',
-        'complete_years',
-        'complete_month',
-        'school_medium',
-        'passing_marks',
-        'pursuing',
+
+        // Experience (summary)
         'experience_years',
         'experience_months',
         'experience_level',
         'is_working',
         'notice_period',
+
+        // Current Job (summary)
         'job_title',
-        'job_roles',
-        'preferred_job_titles',
         'company_name',
         'current_salary',
+
+        // Preferences
         'prefers_night_shift',
         'prefers_day_shift',
         'work_from_home',
         'work_from_office',
-        'field_job',
-        'experience_type',
-        'employment_type',
         'preferred_language',
-        'resume',
+        'english_level',
+
+        // Arrays (JSON)
         'skills',
+        'preferred_job_titles',
+        'preferred_languages',
+        'preferred_locations',
+
+        // Files & Auth
+        'resume',
+        'profile_pic',
+        'password',
+        'number',
+        'token',
+        'otp',
+        'otp_expires_at',
+
+        // Meta
         'active_user',
         'last_login',
         'total_jobs_applied',
         'total_job_views',
-        'created_at',
-        'updated_at',
-        'otp',
-        'otp_expires_at',
-        'number',
-        'token',
-        'password',
         'doneprofile',
-        'start_date',
-        'end_date',
-        'english_level',
-        'preferred_locations',
-        'preferred_languages',
-        'profile_pic'
     ];
 
-  protected $casts = [
-    'skills' => 'array',
-    'preferred_locations'=> 'array',
-    'preferred_languages'=> 'array',
-    'preferred_job_titles'=> 'array',
+    protected $casts = [
+       'skills'               => 'array',
+    'job_roles'            => 'array',
+    'preferred_job_titles' => 'array',
+    'preferred_languages'  => 'array',
+    'preferred_locations'  => 'array',
+    'immediate_joiner'     => 'boolean',
+    'open_to_opportunities'=> 'boolean',
+    'prefers_day_shift'    => 'boolean',
+    'prefers_night_shift'  => 'boolean',
+    'work_from_home'       => 'boolean',
+    'work_from_office'     => 'boolean',
+    'field_job'            => 'boolean',
+    ];
 
+    protected $hidden = [
+        'password',
+        'token',
+        'otp',
+        'otp_expires_at',
+    ];
 
-];
+    // =================================================================
+    // RELATIONSHIPS
+    // =================================================================
 
     public function educations()
     {
         return $this->hasMany(CandidateEducation::class);
     }
+
+   
 
     public function experiences()
     {
@@ -104,6 +118,7 @@ class Candidate extends Model
     {
         return $this->hasMany(CandidateLanguage::class);
     }
+
     public function employerview()
     {
         return $this->belongsToMany(Employer::class, 'employer_candidate_views')
@@ -111,26 +126,68 @@ class Candidate extends Model
                     ->withTimestamps();
     }
 
+    // =================================================================
+    // SCOPES
+    // =================================================================
+
     public function scopeFilter($query, array $filters)
+    {
+        if (!empty($filters['city'])) {
+            $query->whereRaw('LOWER(city) LIKE ?', ['%' . strtolower($filters['city']) . '%']);
+        }
+
+        if (!empty($filters['min_experience'])) {
+            $query->whereRaw('(experience_years * 12 + experience_months) >= ?', [(int)$filters['min_experience'] * 12]);
+        }
+
+        if (!empty($filters['max_experience'])) {
+            $query->whereRaw('(experience_years * 12 + experience_months) <= ?', [(int)$filters['max_experience'] * 12]);
+        }
+
+        // Filter by Graduation Degree
+        if (!empty($filters['graduation_degree'])) {
+            $query->whereHas('educations', function ($q) use ($filters) {
+                $q->where('education_type', 'graduation')
+                  ->whereRaw('LOWER(education_level) LIKE ?', ['%' . strtolower($filters['graduation_degree']) . '%']);
+            });
+        }
+
+        // Filter by Post-Graduation Degree
+        if (!empty($filters['post_graduation_degree'])) {
+            $query->whereHas('educations', function ($q) use ($filters) {
+                $q->where('education_type', 'post_graduation')
+                  ->whereRaw('LOWER(education_level) LIKE ?', ['%' . strtolower($filters['post_graduation_degree']) . '%']);
+            });
+        }
+
+        // Filter by Specialization (any education)
+        if (!empty($filters['specialization'])) {
+            $query->whereHas('educations', function ($q) use ($filters) {
+                $q->whereRaw('LOWER(specialization) LIKE ?', ['%' . strtolower($filters['specialization']) . '%']);
+            });
+        }
+    }
+
+    // =================================================================
+    // ACCESSORS / MUTATORS (Optional)
+    // =================================================================
+
+    public function getProfilePicUrlAttribute()
+    {
+        return $this->profile_pic ? asset('storage/' . $this->profile_pic) : null;
+    }
+
+    public function getResumeUrlAttribute()
+    {
+        return $this->resume ? asset('storage/' . $this->resume) : null;
+    }
+    public function graduation()
 {
-    if (!empty($filters['degree'])) {
-        $query->whereRaw('LOWER(degree) = ?', [strtolower($filters['degree'])]);
-    }
+    return $this->educations()->where('education_type', 'graduation')->first();
+}
 
-    if (!empty($filters['specialization'])) {
-        $query->whereRaw('LOWER(specialization) LIKE ?', ['%' . strtolower($filters['specialization']) . '%']);
-    }
-
-    if (!empty($filters['city'])) {
-        $query->whereRaw('LOWER(city) LIKE ?', [strtolower($filters['city'])]);
-    }
-
-    if (!empty($filters['min_experience'])) {
-        $query->whereRaw('(experience_years * 12 + experience_months) >= ?', [(int)$filters['min_experience'] * 12]);
-    }
-
-    if (!empty($filters['max_experience'])) {
-        $query->whereRaw('(experience_years * 12 + experience_months) <= ?', [(int)$filters['max_experience'] * 12]);
-    }
+public function postGraduation()
+{
+    return $this->educations()->where('education_type', 'post_graduation')->first();
 }
 }

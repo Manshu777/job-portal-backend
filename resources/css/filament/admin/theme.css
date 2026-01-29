@@ -1,0 +1,86 @@
+/* ===============================
+   Blue + Green + White Theme
+   =============================== */
+
+:root {
+    --primary-50: #e0f7ff;
+    --primary-100: #b3ebff;
+    --primary-200: #80ddff;
+    --primary-300: #4dcfff;
+    --primary-400: #1ac1ff;
+    --primary-500: #009fe3;  /* Blue */
+    --primary-600: #0078b0;
+    --primary-700: #005c8a;
+    --primary-800: #004368;
+    --primary-900: #002a44;
+
+    --green: #10b981;
+    --white-bg: #ffffff;
+    --light-bg: #f8fafc;
+}
+
+/* ----- Body Background (White) ----- */
+body {
+    background-color: var(--light-bg) !important;
+}
+
+/* ----- Sidebar (Blue → Green Gradient) ----- */
+.fi-sidebar {
+    background: linear-gradient(180deg, #009fe3, #10b981);
+    color: #ffffff !important;
+}
+
+/* Sidebar links */
+.fi-sidebar a {
+    color: #ffffff !important;
+    opacity: 0.9;
+}
+
+.fi-sidebar a:hover {
+    opacity: 1;
+}
+
+/* Active menu */
+.fi-sidebar-item-active a {
+    background-color: rgba(255, 255, 255, 0.25) !important;
+    border-left: 4px solid #1ac1ff;
+    color: #ffffff !important;
+}
+
+/* ----- Top Bar (White + Blue Border) ----- */
+.fi-topbar {
+    background: #ffffff;
+    border-bottom: 2px solid #009fe3;
+    color: #009fe3 !important;
+}
+
+/* ----- Buttons (Blue + Green) ----- */
+.fi-btn {
+    background: linear-gradient(90deg, #009fe3, #10b981);
+    color: #fff !important;
+    border: none !important;
+    border-radius: 8px;
+}
+
+.fi-btn:hover {
+    background: linear-gradient(90deg, #0078b0, #0f9a6e);
+    opacity: 0.95;
+}
+
+/* ----- Table header (Light Blue) ----- */
+.fi-ta-header-cell {
+    background: #e0f7ff !important;
+    color: #005c8a !important;
+}
+
+/* ----- Card Backgrounds (White) ----- */
+.fi-card {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+}
+
+/* ----- Input focus (Blue) ----- */
+input:focus, select:focus, textarea:focus {
+    border-color: #009fe3 !important;
+    box-shadow: 0 0 0 1px #009fe3 !important;
+}

@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Candidate;
+use App\Models\CandidateEducation;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Mockery\Undefined;
 use Illuminate\Support\Facades\Auth;
-
+use App\Models\CandidateExperience;
+use Illuminate\Support\Facades\Validator;
 class AllCandidateController extends Controller
 {
     //
@@ -21,158 +24,222 @@ class AllCandidateController extends Controller
         return response()->json($candidates);
     }
 
-    public function AddCandidateInfo(Request $request, $token) {
-    // Find the candidate by token
+    public function AddCandidateInfo(Request $request, $token)
+{
     $candidate = Auth::guard('candidate-api')->user();
 
-    // Check if candidate exists
     if (!$candidate) {
         return response()->json([
-            "success" => false,
-            "message" => "Candidate not found"
-        ], 404);
+            'success' => false,
+            'message' => 'Unauthorized or candidate not found'
+        ], 401);
     }
 
-    // Validate the request
-    $validated = $request->validate([
-        'full_name' => 'sometimes|string|max:255',
-        'number' => 'sometimes|string|max:20',
-        'dob' => 'sometimes|date',
-        'gender' => 'sometimes|string|in:Male,Female,Other',
-        'email' => 'sometimes|email|max:255',
-        'address' => 'sometimes|string|nullable',
-        'city' => 'sometimes|string|nullable',
-        'state' => 'sometimes|string|nullable',
-        'degree' => 'sometimes|string|nullable',
-        'specialization' => 'sometimes|string|nullable',
-        'college_name' => 'sometimes|string|nullable',
-        'passing_marks' => 'sometimes|numeric|nullable',
-        'pursuing' => 'sometimes|boolean|nullable',
-        'experience_years' => 'sometimes|integer|nullable',
-        'experience_months' => 'sometimes|integer|nullable',
-        'job_title' => 'sometimes|string|nullable',
-        'job_roles' => 'sometimes|string|nullable',
-        'company_name' => 'sometimes|string|nullable',
-        'current_salary' => 'sometimes|numeric|nullable',
-        // 'start_year' => 'sometimes|integer|digits:4|nullable',
-        // 'start_month' => 'sometimes|string|max:20|nullable',
-        'prefers_night_shift' => 'sometimes|boolean',
-        'prefers_day_shift' => 'sometimes|boolean',
-        'work_from_home' => 'sometimes|boolean',
-        'work_from_office' => 'sometimes|boolean',
-        'skills' => 'sometimes|array|nullable',
-        'preferred_language' => 'sometimes|string|nullable',
-        'password' => 'sometimes|string|min:8',
-        'education_level' => 'sometimes|string|nullable',
-        'currently_pursuing' => 'sometimes|string|nullable',
-        'highest_education' => 'sometimes|string|nullable',
-        'complete_years' => 'sometimes|integer|nullable',
-        'complete_month' => 'sometimes|string|nullable',
-        'school_medium' => 'sometimes|string|nullable',
-        'experience_level' => 'sometimes|string|nullable',
-        'is_working' => 'sometimes|string|nullable',
-        'notice_period' => 'sometimes|string|nullable',
-        
-        'preferred_job_titles' => 'nullable',
-     
+    // === VALIDATION ===
+    $request->validate([
+        'full_name'           => 'sometimes|string|max:255',
+        'number'              => 'sometimes|string|max:20',
+        'dob'                 => 'sometimes|date',
+        'gender'              => 'sometimes|in:Male,Female,Other',
+        'email'               => 'sometimes|email|max:255',
+        'city'                => 'sometimes|string|nullable',
+        'state'               => 'sometimes|string|nullable',
 
-        'preferred_languages' => 'sometimes|nullable',
-        'preferred_locations' => 'sometimes|nullable', // Added
-        'profile_pic' => 'sometimes|file|mimes:jpg,jpeg,png|max:2048|nullable', // Added for image upload
-        'english_level' => 'sometimes|string|nullable',
+        'highest_education'   => 'nullable|string',
+        'english_level'       => 'sometimes|string|nullable',
+
+        'experience_years'    => 'nullable|integer|min:0|max:50',
+        'experience_months'   => 'nullable|integer|min:0|max:11',
+        'experience_level'    => 'sometimes|in:Fresher,Experienced,Both',
+        'notice_period'       => 'sometimes|string|nullable',
+        'current_salary'      => 'sometimes|numeric|nullable',
+
+        'immediate_joiner'     => 'sometimes|boolean',
+        'open_to_opportunities'=> 'sometimes|boolean',
+        'prefers_day_shift'    => 'sometimes|boolean',
+        'prefers_night_shift'  => 'sometimes|boolean',
+        'work_from_home'       => 'sometimes|boolean',
+        'work_from_office'     => 'sometimes|boolean',
+        'field_job'            => 'sometimes|boolean',
+
+        'graduation'           => 'sometimes|json',
+        'postGraduation'       => 'sometimes|json',
+
+        // Accept both JSON string and array
+        'skills'               => 'nullable',
+        'job_roles'            => 'nullable',
+        'preferred_job_titles' => 'nullable',
+        'preferred_languages'  => 'nullable',
+        'preferred_locations'  => 'nullable',
+
+        'profile_pic' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+        'resume'      => 'nullable|mimes:pdf|max:5120',
+        'password'    => 'sometimes|string|min:8',
     ]);
 
-    // Update candidate properties
-    $candidate->full_name = $request->full_name ?? $candidate->full_name;
-    $candidate->number = $request->number ?? $candidate->number;
-    $candidate->dob = $request->dob ?? $candidate->dob;
-    $candidate->gender = $request->gender ?? $candidate->gender;
-    $candidate->email = $request->email ?? $candidate->email;
-    $candidate->address = $request->address ?? $candidate->address;
-    $candidate->city = $request->city ?? $candidate->city;
-    $candidate->state = $request->state ?? $candidate->state;
-    $candidate->degree = $request->degree ?? $candidate->degree;
-    $candidate->specialization = $request->specialization ?? $candidate->specialization;
-    $candidate->college_name = $request->college_name ?? $candidate->college_name;
-    $candidate->passing_marks = $request->passing_marks ?? $candidate->passing_marks;
-    $candidate->pursuing = $request->pursuing ?? $candidate->pursuing;
-    $candidate->experience_years = $request->experience_years ?? $candidate->experience_years;
-    $candidate->experience_months = $request->experience_months ?? $candidate->experience_months;
-    $candidate->job_title = $request->job_title ?? $candidate->job_title;
-    $candidate->job_roles = $request->job_roles ?? $candidate->job_roles;
-    $candidate->company_name = $request->company_name ?? $candidate->company_name;
-    $candidate->current_salary = $request->current_salary ?? $candidate->current_salary;
-    $candidate->start_date = $request->start_date ?? $candidate->start_date;
-     $candidate->end_date = $request->end_date ?? $candidate->end_date;
+    // === SAFELY HANDLE JSON ARRAY FIELDS ===
+    $jsonFields = [
+        'skills',
+        'job_roles',
+        'preferred_job_titles',
+        'preferred_languages',
+        'preferred_locations'
+    ];
 
-     $candidate->english_level = $request->english_level ?? $candidate->english_level;
-       
+    $updateData = [];
 
+    foreach ($jsonFields as $field) {
+        if ($request->has($field)) {
+            $value = $request->input($field);
 
-    $candidate->prefers_night_shift = $request->prefers_night_shift ?? $candidate->prefers_night_shift;
-    $candidate->prefers_day_shift = $request->prefers_day_shift ?? $candidate->prefers_day_shift;
-    $candidate->work_from_home = $request->work_from_home ?? $candidate->work_from_home;
-    $candidate->work_from_office = $request->work_from_office ?? $candidate->work_from_office;
-    $candidate->skills = is_array($request->skills) ? json_encode($request->skills) : $candidate->skills;
-    $candidate->preferred_language = $request->preferred_language ?? $candidate->preferred_language;
-    $candidate->education_level = $request->education_level ?? $candidate->education_level;
-    $candidate->currently_pursuing = $request->currently_pursuing ?? $candidate->currently_pursuing;
-    $candidate->highest_education = $request->highest_education ?? $candidate->highest_education;
-    $candidate->complete_years = $request->complete_years ?? $candidate->complete_years;
-    $candidate->complete_month = $request->complete_month ?? $candidate->complete_month;
-    $candidate->school_medium = $request->school_medium ?? $candidate->school_medium;
-    $candidate->experience_level = $request->experience_level ?? $candidate->experience_level;
-    $candidate->is_working = $request->is_working ?? $candidate->is_working;
-    $candidate->notice_period = $request->notice_period ?? $candidate->notice_period;
-    $candidate->employment_type = $request->employment_type ?? $candidate->employment_type;
-    $candidate->experience_type = $request->experience_type ?? $candidate->experience_type;
-      
+            // If it's a JSON string like "[\"PHP\",\"Laravel\"]"
+            if (is_string($value)) {
+                $decoded = json_decode($value, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $updateData[$field] = $decoded;
+                    continue;
+                }
+            }
 
-
-
-
-
-    
-    $candidate->preferred_languages = is_array($request->preferred_languages) ? json_encode($request->preferred_languages) : $candidate->preferred_languages;
-    $candidate->preferred_locations = is_array($request->preferred_locations) ? json_encode($request->preferred_locations) : $candidate->preferred_locations; // Added
-
-    $candidate->preferred_job_titles = is_array($request->preferred_job_titles) ? json_encode($request->preferred_job_titles) : $candidate->preferred_job_titles;
-    $candidate->password = $request->password ? Hash::make($request->password) : $candidate->password;
-    $candidate->doneprofile = 1;
-
-
-    if ($request->hasFile("profile_pic")) {
-    if ($candidate->profile_pic) {
-        Storage::disk("public")->delete($candidate->profile_pic);
-    }
-    $profilePicPath = $request->file('profile_pic')->store('images', "public");
-    $candidate->profile_pic = $profilePicPath;
-}
-    // Handle resume file upload
-    $path = null;
-    if ($request->hasFile("resume")) {
-        // Delete old resume if it exists
-        if ($candidate->resume) {
-            Storage::disk("public")->delete($candidate->resume);
+            // If it's already an array from FormData
+            if (is_array($value)) {
+                $updateData[$field] = array_values(array_filter($value));
+                continue;
+            }
         }
-        // Store new resume
-        $path = $request->file('resume')->store('pdf', "public");
+        // If not sent, keep old value (thanks to $casts, it stays array)
     }
-    $candidate->resume = $path ?? $candidate->resume; // Keep old resume if no new file uploaded
 
-    // Save the candidate
+    // === UPDATE CANDIDATE ===
+    $candidate->update(array_merge([
+        'full_name'           => $request->full_name,
+        'number'              => $request->number,
+        'dob'                 => $request->dob,
+        'gender'              => $request->gender,
+        'email'               => $request->email,
+        'city'                => $request->city,
+        'state'               => $request->state,
+        'highest_education'   => $request->highest_education,
+        'english_level'       => $request->english_level,
+
+        'experience_years'    => $request->experience_years,
+        'experience_months'   => $request->experience_months,
+        'experience_level'    => $request->experience_level,
+        'notice_period'       => $request->notice_period,
+        'current_salary'      => $request->current_salary,
+
+        'immediate_joiner'     => $request->boolean('immediate_joiner', $candidate->immediate_joiner),
+        'open_to_opportunities'=> $request->boolean('open_to_opportunities', $candidate->open_to_opportunities),
+        'prefers_day_shift'    => $request->boolean('prefers_day_shift', $candidate->prefers_day_shift),
+        'prefers_night_shift'  => $request->boolean('prefers_night_shift', $candidate->prefers_night_shift),
+        'work_from_home'       => $request->boolean('work_from_home', $candidate->work_from_home),
+        'work_from_office'     => $request->boolean('work_from_office', $candidate->work_from_office),
+        'field_job'            => $request->boolean('field_job', $candidate->field_job),
+    ], $updateData));
+
+    // === PASSWORD UPDATE ===
+    if ($request->filled('password')) {
+        $candidate->password = Hash::make($request->password);
+    }
+
+    // === PROFILE PICTURE ===
+    if ($request->hasFile('profile_pic')) {
+        if ($candidate->profile_pic) {
+            Storage::disk('public')->delete($candidate->profile_pic);
+        }
+        $candidate->profile_pic = $request->file('profile_pic')->store('images', 'public');
+    }
+
+    // === RESUME ===
+    if ($request->hasFile('resume')) {
+        if ($candidate->resume) {
+            Storage::disk('public')->delete($candidate->resume);
+        }
+        $candidate->resume = $request->file('resume')->store('pdf', 'public');
+    }
+
+    $candidate->doneprofile = 1;
     $candidate->save();
 
+    // === EDUCATION BLOCKS ===
+    foreach (['graduation', 'postGraduation'] as $type) {
+        $data = $request->input($type);
+        if (!$data) continue;
+
+        if (is_string($data)) {
+            $data = json_decode($data, true) ?? [];
+        }
+
+        if (!empty($data['education_level'])) {
+            $educationType = $type === 'graduation' ? 'graduation' : 'post_graduation';
+
+            CandidateEducation::updateOrCreate(
+                [
+                    'candidate_id' => $candidate->id,
+                    'education_type' => $educationType,
+                ],
+                [
+                    'education_level' => $data['education_level'] ?? null,
+                    'specialization'  => $data['specialization'] ?? null,
+                    'college_name'    => $data['college_name'] ?? null,
+                    'complete_years'  => $data['complete_years'] ?? null,
+                    'complete_month'   => $data['complete_month'] ?? null,
+                ]
+            );
+        }
+    }
+
+    // === EXPERIENCES (if any) ===
+    if ($request->has('experiences')) {
+        $raw = $request->input('experiences', []);
+        $experiences = collect($raw)->map(fn($item) => is_string($item) ? json_decode($item, true) : $item)->filter()->values();
+
+        if ($experiences->isNotEmpty()) {
+            $candidate->experiences()->delete();
+            $currentJob = null;
+
+            foreach ($experiences as $exp) {
+                if (!is_array($exp)) continue;
+
+                $experience = $candidate->experiences()->create([
+                    'job_title'    => $exp['job_title'] ?? null,
+                    'company_name' => $exp['company_name'] ?? null,
+                    'start_date'   => $exp['start_date'] ?? null,
+                    'end_date'     => $exp['is_current'] ?? false ? null : ($exp['end_date'] ?? null),
+                    'is_current'   => $exp['is_current'] ?? false,
+                    'salary'       => $exp['salary'] ?? null,
+                ]);
+
+                if ($exp['is_current'] ?? false) {
+                    $currentJob = $experience;
+                }
+            }
+
+            if ($currentJob) {
+                $candidate->update([
+                    'job_title'      => $currentJob->job_title,
+                    'company_name'   => $currentJob->company_name,
+                    'current_salary' => $currentJob->salary,
+                    'is_working'     => 'Yes',
+                ]);
+            } else {
+                $candidate->update([
+                    'job_title'      => null,
+                    'company_name'   => null,
+                    'current_salary' => null,
+                    'is_working'     => 'No',
+                ]);
+            }
+        }
+    }
+
+    // === FINAL RESPONSE ===
     return response()->json([
-        "success" => true,
-        "message" => "Candidate profile updated successfully",
-        "path" => $path
+        'success' => true,
+        'message' => 'Profile updated successfully',
+        'data' => $candidate->refresh()->makeHidden(['password'])
     ]);
 }
-
- 
-
-
 
     public function getCandidateinfo($token){
        $candidate = Auth::guard('candidate-api')->user();
@@ -187,17 +254,35 @@ class AllCandidateController extends Controller
 
 
  public function loginbypasswod(Request $request){
-$email=$request->email;
-$getuser= Candidate::whereEmail($email)->first();
 
- if (!$getuser || !Hash::check($request->password, $getuser->password)) {
+       $email = $request->email;
+    $password = $request->password;
+
+    $candidate = Candidate::where('email', $email)->first();
+
+    if (!$candidate || !Hash::check($password, $candidate->password)) {
         return response()->json([
             "success" => false,
             "message" => "Invalid email or password"
-        ]);
+        ], 400);
     }
-    
-return response()->json(["success"=>true,"message"=>"user Logined","token"=>$getuser->token]);
+
+    // 🔥 Generate Sanctum token
+    $token = $candidate->createToken('candidate-api')->plainTextToken;
+
+    // 🔥 Store token in DB + update last login
+    $candidate->update([
+        'token' => $token,
+        'last_login' => now(),
+    ]);
+
+    return response()->json([
+        "success" => true,
+        "message" => "User logged in successfully",
+        "token" => $token,
+        "user" => $candidate
+    ]);
+
 
  }
 
@@ -221,8 +306,8 @@ return response()->json(["success"=>true,"message"=>"user Logined","token"=>$get
         'college_name' => 'nullable|string',
         'passing_marks' => 'nullable|numeric',
         'pursuing' => 'nullable|boolean',
-        'experience_years' => 'nullable|integer',
-        'experience_months' => 'nullable|integer',
+        'experience_years' => 'nullable',
+        'experience_months' => 'nullable',
         'job_title' => 'nullable|string',
         'job_roles' => 'nullable|string',
         'company_name' => 'nullable|string',

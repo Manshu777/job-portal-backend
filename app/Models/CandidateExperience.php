@@ -20,6 +20,8 @@ protected $table = 'candidate_experiences';
         'start_date',
     ];
 
+   
+
     protected $casts = [
         'job_roles' => 'array',
     ];
@@ -28,4 +30,5 @@ protected $table = 'candidate_experiences';
     {
         return $this->belongsTo(Candidate::class);
     }
+    
 }

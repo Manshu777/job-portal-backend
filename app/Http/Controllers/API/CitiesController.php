@@ -8,6 +8,7 @@ use App\Models\Location;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Http;
 
 class CitiesController extends Controller
 {
@@ -138,6 +139,167 @@ class CitiesController extends Controller
         ], 200);
     }
 
+
+
+     public function searchCities(Request $request)
+    {
+        $query = $request->input('query');
+
+        if (!$query) {
+            return response()->json(['status' => 'error', 'message' => 'Please provide a search query'], 400);
+        }
+
+        $apiKey = env('GOOGLE_MAPS_API_KEY');
+
+        $response = Http::get('https://maps.googleapis.com/maps/api/place/autocomplete/json', [
+            'input' => $query,
+            'key' => $apiKey,
+            'types' => '(cities)',
+            'components' => 'country:in',
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $response->json()['predictions'] ?? [],
+        ]);
+    }
+
+    // 2️⃣ Search areas/localities inside a selected city
+
+   public function searchAreas(Request $request)
+{
+    $cityName = $request->input('city');
+    $areaQuery = $request->input('query');
+
+    if (!$cityName || !$areaQuery) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Please provide both a city name and an area query'
+        ], 400);
+    }
+
+    $apiKey = env('GOOGLE_MAPS_API_KEY');
+
+    // Get city center
+    $cityResponse = Http::get('https://maps.googleapis.com/maps/api/place/findplacefromtext/json', [
+        'input' => $cityName,
+        'inputtype' => 'textquery',
+        'fields' => 'place_id,geometry',
+        'key' => $apiKey,
+    ]);
+
+    $cityData = $cityResponse->json();
+
+    if (empty($cityData['candidates'])) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'City not found'
+        ], 404);
+    }
+
+    $cityLocation = $cityData['candidates'][0]['geometry']['location'];
+    $lat = $cityLocation['lat'];
+    $lng = $cityLocation['lng'];
+
+    // Autocomplete with strict restriction
+    $response = Http::get('https://maps.googleapis.com/maps/api/place/autocomplete/json', [
+        'input' => "$areaQuery, $cityName",
+        'key' => $apiKey,
+        'types' => 'sublocality|neighborhood|locality',
+        'location' => "$lat,$lng",
+        'radius' => 30000,         // Adjust based on city size
+        'strictbounds' => true,    // Critical for "only this city"
+        'components' => 'country:in',
+    ]);
+
+    $areas = $response->json();
+
+    return response()->json([
+        'status' => 'success',
+        'city' => $cityName,
+        'areas' => $areas['predictions'] ?? [],
+    ]);
+}
+
+
+
+
+public function searchAreaCompany(Request $request)
+{
+    $cityName   = $request->input('city');
+    $areaQuery  = $request->input('query');
+    $apiKey     = env('GOOGLE_MAPS_API_KEY');
+
+    // Validation
+    if (!$areaQuery || empty(trim($areaQuery))) {
+        return response()->json([
+            'status'  => 'error',
+            'message' => 'Query parameter is required'
+        ], 400);
+    }
+
+    // Base parameters
+    $params = [
+        'input'      => $areaQuery,
+        'key'        => $apiKey,
+        'components' => 'country:in', // Restrict to India
+    ];
+
+    // Case 1: No city provided → Search cities, states, etc.
+    if (!$cityName || trim($cityName) === '') {
+        $params['types'] = 'locality|administrative_area_level_1|administrative_area_level_2';
+    } 
+    // Case 2: City is provided → Bias results to that city + search areas inside it
+    else {
+        // First, get lat/lng of the city
+        $cityResponse = Http::get('https://maps.googleapis.com/maps/api/place/findplacefromtext/json', [
+            'input'      => $cityName,
+            'inputtype'  => 'textquery',
+            'fields'     => 'geometry,place_id',
+            'key'        => $apiKey,
+        ]);
+
+        $cityData = $cityResponse->json();
+
+        if (empty($cityData['candidates'][0])) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'City not found'
+            ], 404);
+        }
+
+        $location = $cityData['candidates'][0]['geometry']['location'];
+        $lat = $location['lat'];
+        $lng = $location['lng'];
+
+        // Now search areas biased to this city
+        $params['location'] = "$lat,$lng";
+        $params['radius']   = 30000; // 30km radius
+        $params['input']    = "$areaQuery, $cityName"; // Helps Google understand context
+        $params['types']    = '(regions)'; // Best for areas/localities
+        // Optional: strictbounds can make it even more accurate
+        // $params['strictbounds'] = true;
+    }
+
+    // Final API call
+    $response = Http::get('https://maps.googleapis.com/maps/api/place/autocomplete/json', $params);
+
+    $data = $response->json();
+
+    if ($response->failed() || $data['status'] !== 'OK') {
+        return response()->json([
+            'status'  => 'error',
+            'message' => 'Google API error: ' . ($data['status'] ?? 'Unknown'),
+            'details' => $data
+        ], 500);
+    }
+
+    return response()->json([
+        'status' => 'success',
+        'areas'  => $data['predictions'] ?? []
+    ]);
+}
+
     // Search cities by name
    public function search(Request $request): JsonResponse
 {
@@ -157,4 +319,6 @@ class CitiesController extends Controller
         'data' => $cities
     ], 200);
 }
+
+
 }

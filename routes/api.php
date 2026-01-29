@@ -19,7 +19,7 @@ use App\Http\Controllers\API\JobTitleController;
 
 use App\Http\Controllers\API\CitiesController;
 use App\Http\Controllers\API\QualificationsController;
-
+use App\Http\Controllers\API\JobApplicationController;
 
 
 Route::get('/user', function (Request $request) {
@@ -29,9 +29,18 @@ Route::get('/user', function (Request $request) {
 
 
 Route::prefix('v1')->group(function () {
+
+
     Route::apiResource('candidate', CandidateController::class);
      Route::get('/suggestions', [CandidateController::class, 'getSuggestions'])->name('suggestions');
     Route::get('/candidateprofile', [AuthController::class, 'profile']);
+
+
+    Route::post('/job-applications', [JobApplicationController::class, 'apply']);
+    Route::get('/get-applications', [JobApplicationController::class, 'getAppliedJobs']);
+
+//getAppliedJobs
+
     Route::get('/job/{slug}', [JobPostController::class, 'show']);
     Route::apiResource('candidate/lan', CandidateLanguageController::class);
     Route::apiResource('candidate/skills', CandidateSkillController::class);
@@ -45,6 +54,16 @@ Route::prefix('v1')->group(function () {
     Route::post('employer/signup', [EmployerAuthController::class, 'signup']);
     Route::post('employer/send-otp', [EmployerAuthController::class, 'sendOtp']);
 
+    // Forgot Password Routes
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('/verify-password-reset-otp', [AuthController::class, 'verifyPasswordResetOtp']);
+Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+
+ // Employer Routes
+ Route::post('/employer/forgot-password', [EmployerAuthController::class, 'forgotPassword']);
+Route::post('/employer/verify-password-reset-otp', [EmployerAuthController::class, 'verifyPasswordResetOtp']);
+Route::post('/employer/reset-password', [EmployerAuthController::class, 'resetPassword']);
+
      Route::get('/job-titles/search', [JobTitleController::class, 'search']);
     Route::post('employer/verify-otp', [EmployerAuthController::class, 'verifyOtp']);
     Route::post('employer/login', [EmployerAuthController::class, 'login']);
@@ -54,6 +73,8 @@ Route::prefix('v1')->group(function () {
     Route::post('/add-companies', [EmployerAuthController::class, 'addCompany']);
     Route::get('/companies', [EmployerAuthController::class, 'listCompanies']);
     Route::get('/getall/companies', [EmployerAuthController::class, 'getCompanies']);
+// routes/api.php
+Route::get('/job-filters-options', [JobPostController::class, 'filterOptions']);
 
     Route::post('/update-docs', [EmployerAuthController::class, 'update_docs']);
     Route::middleware('auth:sanctum')->post('employer/update', [EmployerAuthController::class, 'updateEmployer']);
@@ -69,6 +90,13 @@ Route::prefix('v1')->group(function () {
     Route::delete('/jobs/{jobId}', [JobPostController::class, 'destroy']);
 
 
+    Route::get('/jobs/employer/{employerId}', [JobPostController::class, 'indexForEmployer'])
+        ->name('jobs.employer.index');
+
+    // Fetch detailed job data with matches and applications
+    Route::get('/jobs/{id}/dashboard', [JobPostController::class, 'dashboard'])
+        ->name('jobs.dashboard');
+
     
 });
 
@@ -79,7 +107,12 @@ Route::prefix('v1/cities')->group(function () {
     Route::put('/{id}', [CitiesController::class, 'update']);
     Route::delete('/{id}', [CitiesController::class, 'destroy']);
 
-    Route::get('/search', [CitiesController::class, 'search']);
+    Route::get('/search-cities', [CitiesController::class, 'searchCities']);
+    Route::get('/search-area', [CitiesController::class, 'searchAreas']);
+    Route::get('/search-area-company', [CitiesController::class, 'searchAreaCompany']);
+
+    //searchAreaCompany
+
 
         Route::get('/{cityId}/locations', [CitiesController::class, 'searchLocations']);
 });
@@ -96,6 +129,10 @@ Route::prefix('v1/qualifications')->group(function () {
     Route::get('/{qualificationId}/specializations', [QualificationsController::class, 'specializations']);
 });
 Route::post('v1/generate-job-description', [JobDescriptionController::class, 'generateJobDescription']);
+
+
+Route::post('v1/generate-skills', [JobDescriptionController::class, 'generateSkills']);
+
 Route::post("v1/createcandidate", [AllCandidateController::class, "CreateCandidate"]);
 
 Route::post("v1/updatecandidate/{token}",[AllCandidateController::class,"AddCandidateInfo"]);

@@ -41,8 +41,8 @@ class EmployerAuthController extends Controller
             ['email' => $email],
             [
                 'otp' => $otp,
-                'expires_at' => Carbon::now()->addMinutes(10),
-                'session_token' => null, // Reset session token
+                'expires_at' => Carbon::now()->addMinutes(10)
+
             ]
         );
 
@@ -182,7 +182,7 @@ class EmployerAuthController extends Controller
 
         // Notify admin about new company registration
         try {
-            Mail::to('manshu.developer@gmail.com')->send(new NewCompanyRegistered($employer, $company));
+            Mail::to('Nwcchd14@gmail.com')->send(new NewCompanyRegistered($employer, $company));
         } catch (\Exception $e) {
             Log::error('Failed to send company registration email: ' . $e->getMessage());
         }
@@ -262,7 +262,7 @@ class EmployerAuthController extends Controller
     }
 
 
-    public function updateEmployer(Request $request)
+  public function updateEmployer(Request $request)
     {
         // Get the authenticated employer
         $employer = Auth::guard('employer-api')->user();
@@ -276,15 +276,16 @@ class EmployerAuthController extends Controller
 
         // Validate the request
         $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|string|max:255',
-            'company_name' => 'sometimes|string|max:255',
-            'company_location' => 'sometimes|string|max:255',
-            'contact_person' => 'sometimes|string|max:255',
-            'contact_phone' => 'sometimes|string|max:20',
-            'gst_number' => 'sometimes|string|max:15',
-            'gst_certificate' => 'sometimes|file|mimes:pdf|max:2048', // PDF, max 2MB
-            'company_pan_card' => 'sometimes|file|mimes:pdf|max:2048', // PDF, max 2MB
-            'password' => 'sometimes|string|min:6',
+            'name' => 'sometimes|string|max:255', // Employer field
+            'company_name' => 'sometimes|string|max:255', // Company field
+            'company_location' => 'sometimes|string|max:255', // Company field
+            'contact_person' => 'sometimes|string|max:255', // Company field
+            'contact_phone' => 'sometimes|string|max:20', // Company field
+            // 'gst_number' => 'sometimes|string|max:15', // Company field
+            'gst_certificate' => 'sometimes|file|mimes:pdf|max:2048', // Company field, PDF, max 2MB
+            'company_pan_card' => 'sometimes|file|mimes:pdf|max:2048', // Assuming this maps to other_certificate
+            'password' => 'sometimes|string|min:6', // Employer field
+            'contact_email' => 'sometimes|email|max:255', // Add if contact_email is in Company or Employer
         ], [
             'gst_certificate.mimes' => 'The GST certificate must be a PDF file.',
             'company_pan_card.mimes' => 'The company PAN card must be a PDF file.',
@@ -294,9 +295,12 @@ class EmployerAuthController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // Get or create the associated company
+        $company = $employer->company ?? new Company(['employer_id' => $employer->id]);
+
         // Handle file uploads
-        $gstCertificatePath = $employer->gst_certificate;
-        $companyPanCardPath = $employer->company_pan_card;
+        $gstCertificatePath = $company->gst_certificate;
+        $otherCertificatePath = $company->other_certificate; // Assuming company_pan_card maps to other_certificate
 
         if ($request->hasFile('gst_certificate') && $request->file('gst_certificate')->isValid()) {
             $filename = 'gst_' . time() . '_' . $request->file('gst_certificate')->getClientOriginalName();
@@ -305,33 +309,62 @@ class EmployerAuthController extends Controller
 
         if ($request->hasFile('company_pan_card') && $request->file('company_pan_card')->isValid()) {
             $filename = 'pan_' . time() . '_' . $request->file('company_pan_card')->getClientOriginalName();
-            $companyPanCardPath = $request->file('company_pan_card')->storeAs('documents', $filename, 'public');
+            $otherCertificatePath = $request->file('company_pan_card')->storeAs('documents', $filename, 'public');
         }
 
-        // Prepare data for update
-        $updateData = [
+        // Prepare employer data for update
+        $employerData = [
             'name' => $request->input('name', $employer->name),
-            'company_name' => $request->input('company_name', $employer->company_name),
-            'company_location' => $request->input('company_location', $employer->company_location),
-            'contact_person' => $request->input('contact_person', $employer->contact_person),
-            'contact_phone' => $request->input('contact_phone', $employer->contact_phone),
-            'gst_number' => $request->input('gst_number', $employer->gst_number),
-            'gst_certificate' => $gstCertificatePath,
-            'company_pan_card' => $companyPanCardPath,
         ];
 
         // Update password if provided
         if ($request->has('password')) {
-            $updateData['password'] = Hash::make($request->password);
+            $employerData['password'] = Hash::make($request->password);
         }
 
         // Update employer record
-        $employer->update($updateData);
+        $employer->update($employerData);
+
+        // Prepare company data for update
+        $companyData = [
+            'name' => $request->input('company_name', $company->name ?? null),
+            'company_location' => $request->input('company_location', $company->company_location ?? null),
+            'contact_person' => $request->input('contact_person', $company->contact_person ?? null),
+            'contact_phone' => $request->input('contact_phone', $company->contact_phone ?? null),
+            // 'gst_number' => $request->input('gst_number', $company->gst_number ?? null),
+            'gst_certificate' => $gstCertificatePath,
+            'other_certificate' => $otherCertificatePath, // Assuming company_pan_card maps to other_certificate
+            'contact_email' => $request->input('contact_email', $company->contact_email ?? null), // Add if needed
+        ];
+
+        // Update or create company record
+        if ($company->exists) {
+            $company->update($companyData);
+        } else {
+            $company->fill($companyData)->save();
+        }
+
+        // Load the updated company relationship
+        $employer->load('company');
+
+        // Prepare response data
+        $responseData = [
+            'id' => $employer->id,
+            'name' => $employer->name,
+            'company_name' => $employer->company ? $employer->company->name : '',
+            'company_location' => $employer->company ? $employer->company->company_location : '',
+            'contact_person' => $employer->company ? $employer->company->contact_person : '',
+            'contact_phone' => $employer->company ? $employer->company->contact_phone : '',
+            // 'gst_number' => $employer->company ? $employer->company->gst_number : '',
+            'gst_certificate' => $employer->company ? $employer->company->gst_certificate : '',
+            'company_pan_card' => $employer->company ? $employer->company->other_certificate : '', // Map to other_certificate
+            'contact_email' => $employer->company ? $employer->company->contact_email ?? '' : '', // Add if needed
+        ];
 
         return response()->json([
             'success' => true,
             'message' => 'Employer profile updated successfully',
-            'data' => $employer->fresh(), // Retrieve fresh instance to include updated data
+            'data' => $responseData,
         ], 200);
     }
 
@@ -488,7 +521,7 @@ class EmployerAuthController extends Controller
 
             // Notify admin about new company registration
             try {
-                Mail::to('manshu.developer@gmail.com')->send(new NewCompanyRegistered($employer, $company, [
+                Mail::to('Nwcchd14@gmail.com')->send(new NewCompanyRegistered($employer, $company, [
                     'needs_review' => $needsReview,
                     'review_reason' => $reviewReason,
                 ]));
@@ -559,24 +592,205 @@ class EmployerAuthController extends Controller
     }
 
     public function profile(Request $request)
-    {
-        // Retrieve the authenticated employer using the 'employer-api' guard
-        $employer = Auth::guard('employer-api')->user();
-  
+{
+    $employer = Auth::guard('employer-api')->user();
 
-        if (!$employer) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized',
-            ], 401);
+    if (!$employer) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Unauthorized',
+        ], 401);
+    }
+
+    $employer->resetDailyCredits();
+
+    // Load company
+    $employer->load('company');
+
+    $responseData = [
+        'id' => $employer->id,
+        'name' => $employer->name,
+        'company_name' => $employer->company->name ?? '',
+        'company_location' => $employer->company->company_location ?? '',
+        'contact_person' => $employer->company->contact_person ?? '',
+        'contact_email' => $employer->contact_email,
+        'contact_phone' => $employer->company->contact_phone ?? '',
+        'job_post_credits' => $employer->job_post_credits,
+        'database_credits' => $employer->database_credits,
+        'is_blocked' => $employer->is_blocked,
+        'is_verified' => $employer->is_verified,
+        'remark' => $employer->remark,
+
+        // ⭐ Company certificates
+      'company_documents' => $employer->company ? [
+    'gst_certificate' => $employer->company->gst_certificate
+        ? asset('storage/' . $employer->company->gst_certificate)
+        : null,
+
+    'other_certificate' => $employer->company->other_certificate
+        ? url('uploads/company/' . $employer->company->other_certificate)
+        : null,
+] : null,
+
+    ];
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Employer profile retrieved successfully',
+        'data' => $responseData,
+    ], 200);
+}
+
+     public function forgotPassword(Request $request)
+    {
+        $request->validate([
+            'contact_email' => 'required|email|exists:employers,contact_email',
+        ]);
+
+        // Generate a random 6-digit OTP
+        $otp = sprintf("%06d", mt_rand(100000, 999999));
+
+        // Check if an OTP record already exists
+        $otpRecord = OtpVerification::where('email', $request->contact_email)->first();
+
+        if ($otpRecord) {
+            // Update existing OTP record
+            $otpRecord->update([
+                'otp' => $otp,
+                'expires_at' => Carbon::now()->addMinutes(10),
+                'session_token' => null,
+               
+            ]);
+        } else {
+            // Create new OTP record
+            OtpVerification::create([
+                'email' => $request->contact_email,
+                'otp' => $otp,
+                'expires_at' => Carbon::now()->addMinutes(10),
+            ]);
         }
 
-        $employer->resetDailyCredits();
+        try {
+            // Send OTP to the user's email
+            Mail::to($request->contact_email)->send(new SendOtpMail($otp));
+            return response()->json([
+                'success' => true,
+                'message' => 'Password reset OTP sent successfully',
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send OTP',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify password reset OTP
+     */
+    public function verifyPasswordResetOtp(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'contact_email' => 'required|email|exists:employers,contact_email',
+            'otp' => 'required|numeric|digits:6',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $otpRecord = OtpVerification::where('email', $request->contact_email)
+            ->where('otp', $request->otp)
+            ->first();
+
+        if (!$otpRecord) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid OTP',
+            ], 400);
+        }
+
+        if (Carbon::now()->gt($otpRecord->expires_at)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'OTP has expired',
+            ], 400);
+        }
+
+        // Generate a reset token
+        $resetToken = Str::random(60);
+        $otpRecord->update([
+            'session_token' => $resetToken,
+            'session_token_expires_at' => Carbon::now()->addMinutes(30),
+        ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Employer profile retrieved successfully',
-            'data' => $employer,
+            'message' => 'OTP verified successfully',
+            'reset_token' => $resetToken,
+            'contact_email' => $request->contact_email,
+        ], 200);
+    }
+
+    /**
+     * Reset password
+     */
+    public function resetPassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'contact_email' => 'required|email|exists:employers,contact_email',
+            'reset_token' => 'required|string',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $otpRecord = OtpVerification::where('email', $request->contact_email)
+            ->where('session_token', $request->reset_token)
+            ->first();
+
+        // if (!$otpRecord) {
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Invalid reset token',
+        //     ], 400);
+        // }
+
+        // if (Carbon::now()->gt($otpRecord->session_token_expires_at)) {
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Reset token has expired',
+        //     ], 400);
+        // }
+
+        $employer = Employer::where('contact_email', $request->contact_email)->first();
+        if (!$employer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Employer not found',
+            ], 404);
+        }
+
+        // Update password
+        $employer->update([
+            'password' => Hash::make($request->password),
+        ]);
+
+        // Clear OTP record
+        // $otpRecord->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password reset successfully',
         ], 200);
     }
 }

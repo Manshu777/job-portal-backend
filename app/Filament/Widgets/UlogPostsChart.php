@@ -3,6 +3,9 @@
 namespace App\Filament\Widgets;
 
 use Filament\Widgets\ChartWidget;
+use Carbon\Carbon;
+use Flowframe\Trend\Trend;
+use App\Models\JobPostingApplication;
 
 class UlogPostsChart extends ChartWidget
 {
@@ -10,28 +13,29 @@ class UlogPostsChart extends ChartWidget
 
     protected function getData(): array
     {
-        // Generate random data for job applications over 6 months
-        $data = [
-            rand(10, 100), // Jan
-            rand(10, 100), // Feb
-            rand(10, 100), // Mar
-            rand(10, 100), // Apr
-            rand(10, 100), // May
-            rand(10, 100), // Jun
-        ];
+        $trend = Trend::query(JobPostingApplication::query())
+            ->between(
+                start: now()->subMonths(11)->startOfMonth(),
+                end: now()->endOfMonth()
+            )
+            ->perMonth()
+            ->count();
 
         return [
             'datasets' => [
                 [
                     'label' => 'Job Applications',
-                    'data' => $data,
-                    'borderColor' => '#FF6384', // Pinkish-red for line
-                    'backgroundColor' => 'rgba(255, 99, 132, 0.2)', // Light fill under line
+                    'data' => $trend->map(fn($item) => $item->aggregate)->toArray(),
+                    'borderColor' => '#10b981', // Emerald green
+                    'backgroundColor' => 'rgba(16, 185, 129, 0.1)',
                     'fill' => true,
-                    'tension' => 0.4, // Smooth curve
+                    'tension' => 0.4,
+                    'pointBackgroundColor' => '#10b981',
+                    'pointHoverBackgroundColor' => '#059669',
+                    'pointRadius' => 5,
                 ],
             ],
-            'labels' => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            'labels' => $trend->map(fn($item) => Carbon::parse($item->date)->format('M Y'))->toArray(),
         ];
     }
 
@@ -40,31 +44,53 @@ class UlogPostsChart extends ChartWidget
         return 'line';
     }
 
-    protected function getOptions(): array
-    {
-        return [
-            'plugins' => [
-                'legend' => [
+   protected function getOptions(): array   // ← FIXED HERE
+{
+    return [
+        'plugins' => [
+            'title' => [
+                'display' => true,
+                'text' => 'Monthly Job Applications (Last 12 Months)',
+                'font' => ['size' => 16],
+            ],
+            'legend' => [
+                'position' => 'top',
+            ],
+            'tooltip' => [
+                'mode' => 'index',
+                'intersect' => false,
+            ],
+        ],
+        'scales' => [
+            'y' => [
+                'beginAtZero' => true,
+                'grid' => ['display' => true],
+                'title' => [
                     'display' => true,
+                    'text' => 'Number of Applications',
+                    'font' => ['size' => 14],
                 ],
             ],
-            'scales' => [
-                'y' => [
-                    'beginAtZero' => true,
-                    'title' => [
-                        'display' => true,
-                        'text' => 'Number of Applications',
-                    ],
-                ],
-                'x' => [
-                    'title' => [
-                        'display' => true,
-                        'text' => 'Month',
-                    ],
+            'x' => [
+                'grid' => ['display' => false],
+                'title' => [
+                    'display' => true,
+                    'text' => 'Month',
+                    'font' => ['size' => 14],
                 ],
             ],
-        ];
-    }
+        ],
+        'interaction' => [
+            'mode' => 'nearest',
+            'axis' => 'x',
+            'intersect' => false,
+        ],
+        'animation' => [
+            'duration' => 1500,
+            'easing' => 'easeOutQuart',
+        ],
+    ];
+}
 
    
 }

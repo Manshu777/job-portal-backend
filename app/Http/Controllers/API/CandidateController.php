@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
+use App\Models\CandidateEducation;
 class CandidateController extends Controller
 {
     public function index()
@@ -355,8 +356,31 @@ class CandidateController extends Controller
 
 
 
+    private function maskEmail($email)
+{
+    if (!$email || !str_contains($email, '@')) {
+        return 'xxxx@xxxx.com';
+    }
+
+    [$name, $domain] = explode('@', $email);
+
+    $maskedName = substr($name, 0, 2) . str_repeat('*', max(0, strlen($name) - 2));
+    $domainPart = explode('.', $domain)[0] ?? '';
+    $maskedDomain = substr($domainPart, 0, 2) . str_repeat('*', max(0, strlen($domainPart) - 2));
+
+    return $maskedName . '@' . $maskedDomain . '.com';
+}
+
     public function filter(Request $request)
 {
+    // Parse comma-separated strings into arrays for multi-select fields
+    $multiFields = ['city', 'language', 'specialization', 'degree'];
+    foreach ($multiFields as $field) {
+        if ($request->has($field) && is_string($request->input($field))) {
+            $request->merge([$field => array_map('trim', explode(',', $request->input($field)))]);
+        }
+    }
+
     // 1. Validation
     $validator = Validator::make($request->all(), [
         'min_experience' => 'nullable|integer|min:0',
@@ -371,18 +395,23 @@ class CandidateController extends Controller
         'must_have_keywords' => 'nullable|string',
         'exclude_keywords'  => 'nullable|string',
         'active'         => 'nullable|in:1,0',
-        
         'min_age'        => 'nullable|integer|min:0',
+        'english_level' => 'nullable|string|in:beginner,intermediate,fluent',
         'max_age'        => 'nullable|integer|min:0',
         'gender'         => 'nullable|string|in:Male,Female,Other',
-        'degree'         => 'nullable|string',
-        'specialization' => 'nullable|string',
-        'language'       => 'nullable|string',
+        'degree'         => 'nullable|array',
+        'degree.*'       => 'string',
+        'specialization' => 'nullable|array',
+        'specialization.*' => 'string',
+        'language'       => 'nullable|array',
+        'language.*'     => 'string',
         'department'     => 'nullable|string',
-        'city'           => 'nullable|string',
-        'english_level' => 'nullable|string|in:beginner,intermediate,fluent',
+        'city'           => 'nullable|array',
+        'city.*'         => 'string',
+        'english_level'  => 'nullable|string|in:beginner,intermediate,fluent',
         'employment_type' => 'nullable|string',
         'shift_preference' => 'nullable|string|in:day,night',
+        'experience_type' => 'nullable|string|in:fresher,experienced',
         'page'           => 'nullable|integer|min:1',
         'per_page'       => 'nullable|integer|min:1|max:100',
         'number_revealed' => 'nullable|string|in:1,0,last-15-days,last-30-days,last-90-days',
@@ -396,8 +425,10 @@ class CandidateController extends Controller
     }
 
     // 2. Build Query
-    $query = Candidate::query();
+    $query = Candidate::with(['educations', 'experiences'])->select('candidates.*');
+    
 
+    // Resume filter
     if ($request->filled('has_resume')) {
         if ($request->input('has_resume') == 1) {
             $query->whereNotNull('resume');
@@ -406,44 +437,27 @@ class CandidateController extends Controller
         }
     }
 
+    // Number revealed filter
     if ($request->filled('number_revealed')) {
         $employer = Auth::guard('employer-api')->user();
-
         if ($employer) {
             $numberRevealed = $request->input('number_revealed');
 
             if ($numberRevealed === '1') {
-                // All revealed candidates
-                $query->whereHas('employerview', function ($q) use ($employer) {
-                    $q->where('employer_id', $employer->id)
-                      ->where('number_revealed', 1);
-                });
+                $query->whereHas('employerview', fn($q) => $q->where('employer_id', $employer->id)->where('number_revealed', 1));
             } elseif ($numberRevealed === '0') {
-                // Not revealed candidates (0 or no record at all)
                 $query->where(function ($q) use ($employer) {
-                    $q->whereHas('employerview', function ($sq) use ($employer) {
-                            $sq->where('employer_id', $employer->id)
-                               ->where('number_revealed', 0);
-                        })
-                      ->orWhereDoesntHave('employerview', function ($sq) use ($employer) {
-                            $sq->where('employer_id', $employer->id);
-                        });
+                    $q->whereHas('employerview', fn($sq) => $sq->where('employer_id', $employer->id)->where('number_revealed', 0))
+                      ->orWhereDoesntHave('employerview', fn($sq) => $sq->where('employer_id', $employer->id));
                 });
             } else {
-                // Revealed within specific period (assumes 'revealed_at' timestamp in pivot table)
-                $periods = [
-                    'last-15-days' => 15,
-                    'last-30-days' => 30,
-                    'last-90-days' => 90,
-                ];
-                if (isset($periods[$numberRevealed])) {
-                    $days = $periods[$numberRevealed];
+                $periods = ['last-15-days' => 15, 'last-30-days' => 30, 'last-90-days' => 90];
+                $days = $periods[$numberRevealed] ?? null;
+                if ($days) {
                     $dateThreshold = Carbon::now()->subDays($days);
-                    $query->whereHas('employerview', function ($q) use ($employer, $dateThreshold) {
-                        $q->where('employer_id', $employer->id)
-                          ->where('number_revealed', 1)
-                          ->where('revealed_at', '>=', $dateThreshold);
-                    });
+                    $query->whereHas('employerview', fn($q) => $q->where('employer_id', $employer->id)
+                        ->where('number_revealed', 1)
+                        ->where('revealed_at', '>=', $dateThreshold));
                 }
             }
         } else {
@@ -451,204 +465,300 @@ class CandidateController extends Controller
         }
     }
 
+    if ($englishFluency = $request->input('english_level')) {
+    $query->whereRaw('LOWER(english_level) = ?', [strtolower($englishFluency)]);
+}
+
+    // Experience type
+    if ($experienceType = $request->input('experience_type')) {
+        $totalMonths = DB::raw('(experience_years * 12 + experience_months)');
+        if ($experienceType === 'fresher') {
+            $query->where($totalMonths, 0);
+        } elseif ($experienceType === 'experienced') {
+            $query->where($totalMonths, '>', 0);
+        }
+    }
+
+    // Min/Max experience
     if ($minExperience = $request->input('min_experience')) {
         $query->whereRaw('(experience_years * 12 + experience_months) >= ?', [(int)$minExperience * 12]);
     }
-
     if ($maxExperience = $request->input('max_experience')) {
         $query->whereRaw('(experience_years * 12 + experience_months) <= ?', [(int)$maxExperience * 12]);
     }
 
+    // Salary
     if ($request->filled('min_salary')) {
         $query->where('current_salary', '>=', (float)$request->input('min_salary'));
     }
-
     if ($request->filled('max_salary')) {
         $query->where('current_salary', '<=', (float)$request->input('max_salary'));
     }
 
+    // Locations
     if ($locations = $request->input('locations')) {
-        if (is_array($locations)) {
-            $query->whereIn(DB::raw('LOWER(city)'), array_map('strtolower', $locations));
-        } else {
-            $query->whereRaw('LOWER(city) = ?', [strtolower($locations)]);
+        $locations = is_array($locations) ? $locations : [$locations];
+        $query->whereIn(DB::raw('LOWER(city)'), array_map('strtolower', $locations));
+    }
+
+    // Must-have keywords
+
+      if ($keywords = $request->input('must_have_keywords')) {
+      $keywordArray = array_filter(array_map('trim', explode(',', $keywords)));
+
+    foreach ($keywordArray as $keyword) {
+        $like = '%' . strtolower($keyword) . '%';
+
+        $query->where(function ($sq) use ($like) {
+              $sq->whereHas('skills', fn($s) => $s->whereRaw('LOWER(skill_name) LIKE ?', [$like]))
+               ->orWhereRaw('LOWER(job_title) LIKE ?', [$like])
+               ->orWhereRaw('LOWER(job_roles) LIKE ?', [$like])
+               ->orWhereRaw("JSON_SEARCH(LOWER(JSON_EXTRACT(preferred_job_titles, '$')), 'one', ?) IS NOT NULL", [$like]);
+        });
+    }
+}
+  
+  
+       
+    
+
+    // Exclude keywords
+     // Exclude keywords - properly exclude candidates matching any term
+if ($excludeKeywords = $request->input('exclude_keywords')) {
+    $excludeTerms = array_filter(array_map('trim', explode(',', $excludeKeywords)));
+
+    foreach ($excludeTerms as $term) {
+        $term = trim($term);
+        if ($term === '') continue;
+
+        $like = '%' . strtolower($term) . '%';
+
+        $query->where(function ($q) use ($like) {
+            $q->whereDoesntHave('skills', function ($s) use ($like) {
+                $s->whereRaw('LOWER(skill_name) LIKE ?', [$like]);
+            })
+            ->whereRaw('COALESCE(LOWER(job_title), "") NOT LIKE ?', [$like])
+            ->whereRaw('COALESCE(LOWER(job_roles), "") NOT LIKE ?', [$like])
+            ->whereRaw('COALESCE(LOWER(city), "") NOT LIKE ?', [$like])
+            ->whereRaw("JSON_SEARCH(LOWER(COALESCE(JSON_EXTRACT(preferred_job_titles, '$'), '[]')), 'one', ?) IS NULL", [$like]);
+        });
+    }
+}
+
+    
+
+    // === EDUCATION FILTERS USING CandidateEducation ===
+    if ($degrees = $request->input('degree')) {
+        $degrees = is_array($degrees) ? $degrees : [$degrees];
+        if (!in_array('any', array_map('strtolower', $degrees), true)) {
+            $lowerDegrees = array_map('strtolower', $degrees);
+            $query->whereHas('educations', fn($q) => $q->whereIn(DB::raw('LOWER(education_level)'), $lowerDegrees));
         }
     }
 
-    if ($keywords = $request->input('must_have_keywords')) {
-        $keywordArray = array_map('trim', explode(',', $keywords));
-
-        foreach ($keywordArray as $keyword) {
-            $query->where(function ($q) use ($keyword) {
-                // skills relation
-                $q->whereHas('skills', function ($sq) use ($keyword) {
-                    $sq->whereRaw('LOWER(skill_name) LIKE ?', ['%' . strtolower($keyword) . '%']);
-                })
-
-                // direct columns
-                ->orWhereRaw('LOWER(degree) LIKE ?', ['%' . strtolower($keyword) . '%'])
-                ->orWhereRaw('LOWER(specialization) LIKE ?', ['%' . strtolower($keyword) . '%'])
-                ->orWhereRaw('LOWER(job_title) LIKE ?', ['%' . strtolower($keyword) . '%'])
-                ->orWhereRaw('LOWER(job_roles) LIKE ?', ['%' . strtolower($keyword) . '%'])
-                 ->orWhereRaw('LOWER(city) LIKE ?', ['%' . strtolower($keyword) . '%'])
-                ->orWhereRaw('LOWER(state) LIKE ?', ['%' . strtolower($keyword) . '%'])
-                ->orWhereRaw('LOWER(preferred_language) LIKE ?', ['%' . strtolower($keyword) . '%'])
-             
-                //city
-
-                // preferred_job_titles is JSON/array, use JSON_SEARCH (MySQL) 
-                ->orWhereRaw("JSON_SEARCH(LOWER(JSON_EXTRACT(preferred_job_titles, '$')), 'one', ? ) IS NOT NULL", [strtolower($keyword)]);
+    if ($specializations = $request->input('specialization')) {
+        $specializations = is_array($specializations) ? $specializations : [$specializations];
+        $query->whereHas('educations', function ($q) use ($specializations) {
+            $q->where(function ($sq) use ($specializations) {
+                foreach ($specializations as $spec) {
+                    $spec = trim($spec);
+                    if ($spec) {
+                        $sq->orWhereRaw('LOWER(specialization) LIKE ?', ['%' . strtolower($spec) . '%']);
+                    }
+                }
             });
-        }
-    }
-
-    if ($excludeKeywords = $request->input('exclude_keywords')) {
-        $excludeArray = array_map('trim', explode(',', $excludeKeywords));
-
-        $query->where(function ($q) use ($excludeArray) {
-            // Exclude from skills relation
-            $q->whereDoesntHave('skills', function ($sq) use ($excludeArray) {
-                $sq->whereIn(DB::raw('LOWER(skill_name)'), array_map('strtolower', $excludeArray));
-            });
-
-            foreach ($excludeArray as $ex) {
-                $q->whereRaw('LOWER(degree) NOT LIKE ?', ['%' . strtolower($ex) . '%'])
-                  ->whereRaw('LOWER(specialization) NOT LIKE ?', ['%' . strtolower($ex) . '%'])
-                  ->whereRaw('LOWER(city) NOT LIKE ?', ['%' . strtolower($ex) . '%']);
-            }
         });
     }
 
+    if ($educationType = $request->input('education')) {
+        $map = ['graduate' => 'graduation', 'post-graduate' => 'post_graduation', 'others' => 'other'];
+        $type = $map[strtolower($educationType)] ?? null;
+        if ($type) {
+            $query->whereHas('educations', fn($q) => $q->where('education_type', $type));
+        }
+    }
+
+    // Active user
     if ($request->filled('active')) {
         $query->where('active_user', $request->input('active'));
     }
 
+    // Activity period
     if ($request->filled('activity_period')) {
         $periods = [
-            '3-days' => Carbon::now()->subDays(3),
-            '7-days' => Carbon::now()->subDays(7),
-            '15-days' => Carbon::now()->subDays(15),
-            '1-month' => Carbon::now()->subMonth(),
-            '3-months' => Carbon::now()->subMonths(3),
-            '7-months' => Carbon::now()->subMonths(7),
-            '1-year' => Carbon::now()->subYear(),
+            '3-days' => now()->subDays(3),
+            '7-days' => now()->subDays(7),
+            '15-days' => now()->subDays(15),
+            '1-month' => now()->subMonth(),
+            '3-months' => now()->subMonths(3),
+            '7-months' => now()->subMonths(7),
+            '1-year' => now()->subYear(),
         ];
-        if (isset($periods[$request->input('activity_period')])) {
-            $query->where('last_login', '>=', $periods[$request->input('activity_period')]);
+        $date = $periods[$request->input('activity_period')] ?? null;
+        if ($date) {
+            $query->where('last_login', '>=', $date);
         }
     }
 
-    // Age Filter
-    $now = Carbon::now();
+    // Age
+    $now = now();
     if ($minAge = $request->input('min_age')) {
-        $maxDob = $now->copy()->subYears($minAge)->toDateString();
-        $query->where('dob', '<=', $maxDob);
+        $query->where('dob', '<=', $now->copy()->subYears($minAge)->toDateString());
     }
     if ($maxAge = $request->input('max_age')) {
-        $minDob = $now->copy()->subYears($maxAge + 1)->toDateString();
-        $query->where('dob', '>', $minDob);
+        $query->where('dob', '>', $now->copy()->subYears($maxAge + 1)->toDateString());
     }
 
+    // Gender
     if ($gender = $request->input('gender')) {
         $query->where('gender', $gender);
     }
 
-    if ($degree = $request->input('degree')) {
-        if (strtolower($degree) !== 'any') {
-            $query->whereRaw('LOWER(degree) = ?', [strtolower($degree)]);
-        }
-    }
-
-    if ($specialization = $request->input('specialization')) {
-        $query->whereRaw('LOWER(specialization) LIKE ?', ['%' . strtolower($specialization) . '%']);
-    }
-
-    if ($language = $request->input('language')) {
-        $query->whereRaw('LOWER(preferred_language) LIKE ?', ['%' . strtolower($language) . '%']);
-    }
-
-    if ($city = $request->input('city')) {
-        $query->whereRaw('LOWER(city) LIKE ?', ['%' . strtolower($city) . '%']);
-    }
-
-    if ($englishFluency = $request->input('english_level')) {
-        $query->whereRaw('LOWER(english_level) = ?', [strtolower($englishFluency)]);
-    }
-
-    if ($department = $request->input('department')) {
-        $query->whereRaw('LOWER(job_roles) LIKE ?', ['%' . strtolower($department) . '%']);
-    }
-
-    if ($employmentType = $request->input('employment_type')) {
-        $query->whereRaw('LOWER(employment_type) = ?', [strtolower($employmentType)]);
-    }
-
-    if ($shiftPrefs = $request->input('shift_preference')) {
-        $query->where(function ($q) use ($shiftPrefs) {
-            if ($shiftPrefs === 'day') {
-                $q->orWhere('prefers_day_shift', 1);
-            }
-            if ($shiftPrefs === 'night') {
-                $q->orWhere('prefers_night_shift', 1);
+    // Language
+    if ($languages = $request->input('language')) {
+        $languages = is_array($languages) ? $languages : [$languages];
+        $query->where(function ($q) use ($languages) {
+            foreach ($languages as $lang) {
+                $q->orWhereRaw('LOWER(preferred_language) LIKE ?', ['%' . strtolower(trim($lang)) . '%']);
             }
         });
     }
 
-    // Clone before ordering to avoid MySQL errors
+    // City
+    if ($cities = $request->input('city')) {
+        $cities = is_array($cities) ? $cities : [$cities];
+        $query->whereIn(DB::raw('LOWER(city)'), array_map('strtolower', array_map('trim', $cities)));
+    }
+
+    // English level
+    if ($englishFluency = $request->input('english_level')) {
+        $query->whereRaw('LOWER(english_level) = ?', [strtolower($englishFluency)]);
+    }
+
+    // Department
+    if ($department = $request->input('department')) {
+        $query->whereRaw('LOWER(job_roles) LIKE ?', ['%' . strtolower($department) . '%']);
+    }
+
+    // Employment type
+    if ($employmentType = $request->input('employment_type')) {
+        $query->whereRaw('LOWER(employment_type) = ?', [strtolower($employmentType)]);
+    }
+
+    // Shift preference
+    if ($shiftPrefs = $request->input('shift_preference')) {
+        $query->where(function ($q) use ($shiftPrefs) {
+            if ($shiftPrefs === 'day') $q->orWhere('prefers_day_shift', 1);
+            if ($shiftPrefs === 'night') $q->orWhere('prefers_night_shift', 1);
+        });
+    }
+
+    // Clone for faceting
     $facetBase = (clone $query);
     $query->orderBy('full_name', 'asc');
 
-    // 3. Pagination
+    // Pagination
     $candidates = $query->paginate($request->input('per_page', 10));
 
-    // 4. Modify Candidate Data to Mask Phone Numbers, Add Reveal and Visit Status
+    // Mask phone, track visits
     $employer = Auth::guard('employer-api')->user();
+    
     $candidates->getCollection()->transform(function ($candidate) use ($employer) {
-        $hasRevealed = false;
-        $profileVisited = false;
-        if ($employer) {
-            // Check if profile has been visited or number revealed
-            $view = $candidate->employerview()
-                ->where('employer_id', $employer->id)
-                ->first();
+    $numberRevealed = false;
 
-            $hasRevealed = $view && $view->pivot->number_revealed;
-            $profileVisited = $view && $view->pivot->profile_visited;
+    if ($employer) {
+        $view = $candidate->employerview()
+            ->where('employer_id', $employer->id)
+            ->first();
 
-            // Record profile visit if not already visited
-            if (!$profileVisited) {
-                $candidate->employerview()->syncWithoutDetaching([
-                    $employer->id => [
-                        'profile_visited' => true,
-                        'visited_at' => now(),
-                        'number_revealed' => $view ? $view->pivot->number_revealed : false,
-                    ]
-                ]);
-                $profileVisited = true; // Update for response
-            }
+        $numberRevealed = $view?->pivot->number_revealed ?? false;
 
-            $candidate->number = $hasRevealed ? $candidate->number : 'xxxxxxx';
-        } else {
-            $candidate->number = 'xxxxxxx';
+        // Track profile visit
+        if (!$view?->pivot->profile_visited ?? true) {
+            $candidate->employerview()->syncWithoutDetaching([
+                $employer->id => [
+                    'profile_visited' => true,
+                    'visited_at' => now(),
+                ]
+            ]);
         }
-        $candidate->number_revealed = $hasRevealed;
-        $candidate->profile_visited = $profileVisited;
-        return $candidate;
+
+        if ($numberRevealed) {
+            $candidate->number = $candidate->number;
+            $candidate->email  = $candidate->email;
+        } else {
+            $candidate->number = 'XXXXXXXXXX';
+            $candidate->email  = $this->maskEmail($candidate->email);
+        }
+    } else {
+        $candidate->number = 'XXXXXXXXXX';
+        $candidate->email  = $this->maskEmail($candidate->email);
+    }
+
+    // Add these flags
+    $candidate->contact_revealed = $numberRevealed;
+    $candidate->number_revealed  = $numberRevealed;
+    $candidate->email_revealed   = $numberRevealed;
+
+    // === THIS IS THE KEY PART: Attach related data ===
+    $candidate->educations = $candidate->educations->map(function ($edu) {
+        return [
+            'education_level'   => $edu->education_level,
+            'degree'            => $edu->degree,
+            'specialization'    => $edu->specialization,
+            'institute'         => $edu->institute,
+            'year_of_passing'   => $edu->year_of_passing,
+            'education_type'    => $edu->education_type,
+            // add any other fields you want
+        ];
     });
 
-    // 5. Faceted Filters
-    $degreeCounts = (clone $facetBase)
-        ->select('degree as value', DB::raw('COUNT(*) as count'))
-        ->whereNotNull('degree')
-        ->groupBy('degree')
-        ->get();
+    $candidate->experiences = $candidate->experiences->map(function ($exp) {
+        return [
+            'company_name'      => $exp->company_name,
+            'job_title'         => $exp->job_title,
+            'department'        => $exp->department,
+            'start_date'        => $exp->start_date,
+            'end_date'          => $exp->end_date ?? 'Present',
+            'currently_working' => $exp->currently_working,
+            'job_description'   => $exp->job_description,
+            'skills_used'       => $exp->skills_used,
+            // add more as needed
+        ];
+    });
 
-    $specializationCounts = (clone $facetBase)
-        ->select('specialization as value', DB::raw('COUNT(*) as count'))
+    // Optional: Unset the relationship objects to reduce payload size
+    unset($candidate->educations_relation);
+    unset($candidate->experiences_relation);
+
+    return $candidate;
+});
+    // === FACET COUNTS ===
+    $candidateIds = $facetBase->pluck('id');
+
+    // Degree Facet
+    $degreeCounts = CandidateEducation::query()
+        ->selectRaw('LOWER(education_level) AS value, COUNT(DISTINCT candidate_id) AS count')
+        ->whereIn('candidate_id', $candidateIds)
+        ->whereNotNull('education_level')
+        ->groupBy(DB::raw('LOWER(education_level)'))
+        ->orderByDesc('count')
+        ->get()
+        ->map(fn($r) => ['value' => $r->value, 'count' => $r->count])
+        ->values();
+
+    // Specialization Facet
+    $specializationCounts = CandidateEducation::query()
+        ->selectRaw('LOWER(specialization) AS value, COUNT(DISTINCT candidate_id) AS count')
+        ->whereIn('candidate_id', $candidateIds)
         ->whereNotNull('specialization')
-        ->groupBy('specialization')
-        ->get();
+        ->groupBy(DB::raw('LOWER(specialization)'))
+        ->orderByDesc('count')
+        ->get()
+        ->map(fn($r) => ['value' => $r->value, 'count' => $r->count])
+        ->values();
 
+    // Other Facets (unchanged)
     $employmentTypeCounts = (clone $facetBase)
         ->select('employment_type as value', DB::raw('COUNT(*) as count'))
         ->whereNotNull('employment_type')
@@ -670,14 +780,10 @@ class CandidateController extends Controller
     foreach ((clone $facetBase)->pluck('preferred_language') as $langs) {
         foreach (explode(',', $langs) as $lang) {
             $lang = strtolower(trim($lang));
-            if ($lang) {
-                $languageMap[$lang] = ($languageMap[$lang] ?? 0) + 1;
-            }
+            if ($lang) $languageMap[$lang] = ($languageMap[$lang] ?? 0) + 1;
         }
     }
-    $languageCounts = collect($languageMap)->map(function ($count, $value) {
-        return ['value' => $value, 'count' => $count];
-    })->values();
+    $languageCounts = collect($languageMap)->map(fn($c, $v) => ['value' => $v, 'count' => $c])->values();
 
     $deptMap = [];
     foreach ((clone $facetBase)->pluck('job_roles') as $roles) {
@@ -685,15 +791,11 @@ class CandidateController extends Controller
         if (is_array($decoded)) {
             foreach ($decoded as $role) {
                 $role = strtolower(trim($role));
-                if ($role) {
-                    $deptMap[$role] = ($deptMap[$role] ?? 0) + 1;
-                }
+                if ($role) $deptMap[$role] = ($deptMap[$role] ?? 0) + 1;
             }
         }
     }
-    $departmentCounts = collect($deptMap)->map(function ($count, $value) {
-        return ['value' => $value, 'count' => $count];
-    })->values();
+    $departmentCounts = collect($deptMap)->map(fn($c, $v) => ['value' => $v, 'count' => $c])->values();
 
     $englishFluencyCounts = (clone $facetBase)
         ->select('english_level as value', DB::raw('COUNT(*) as count'))
@@ -701,41 +803,38 @@ class CandidateController extends Controller
         ->groupBy('english_level')
         ->get();
 
-    $ages = (clone $facetBase)
-        ->selectRaw('TIMESTAMPDIFF(YEAR, dob, CURDATE()) as age')
-        ->pluck('age');
+    $ages = (clone $facetBase)->selectRaw('TIMESTAMPDIFF(YEAR, dob, CURDATE()) as age')->pluck('age');
     $minAge = $ages->min();
     $maxAge = $ages->max();
 
-    // 6. Return Response
+    // Return
     return response()->json([
         'data' => $candidates->items(),
         'pagination' => [
-            'total'         => $candidates->total(),
-            'per_page'      => $candidates->perPage(),
-            'current_page'  => $candidates->currentPage(),
-            'last_page'     => $candidates->lastPage(),
+            'total' => $candidates->total(),
+            'per_page' => $candidates->perPage(),
+            'current_page' => $candidates->currentPage(),
+            'last_page' => $candidates->lastPage(),
             'next_page_url' => $candidates->nextPageUrl(),
             'prev_page_url' => $candidates->previousPageUrl(),
         ],
         'filters' => [
-            'degrees'           => $degreeCounts,
-            'specializations'   => $specializationCounts,
-            'languages'         => $languageCounts,
-            'departments'       => $departmentCounts,
-            'cities'            => $cityCounts,
-            'employment_types'  => $employmentTypeCounts,
+            'degrees' => $degreeCounts,
+            'specializations' => $specializationCounts,
+            'languages' => $languageCounts,
+            'departments' => $departmentCounts,
+            'cities' => $cityCounts,
+            'employment_types' => $employmentTypeCounts,
             'shift_preferences' => $shiftPrefsCounts,
-            'english_levels'    => $englishFluencyCounts,
-            'min_age'           => $minAge,
-            'max_age'           => $maxAge,
+            'english_levels' => $englishFluencyCounts,
+            'min_age' => $minAge,
+            'max_age' => $maxAge,
         ]
     ]);
 }
 
 
-
-    public function revealNumber(Request $request)
+  public function revealNumber(Request $request)
 {
     $validator = Validator::make($request->all(), [
         'candidate_id' => 'required|integer|exists:candidates,id',
@@ -754,55 +853,55 @@ class CandidateController extends Controller
     }
 
     $candidate = Candidate::findOrFail($request->input('candidate_id'));
-    if (!$candidate->number) {
-        return response()->json(['error' => 'Candidate has no phone number'], 400);
+
+    // Optional: if candidate has no contact info at all
+    if (!$candidate->number && !$candidate->email) {
+        return response()->json(['error' => 'Candidate has no contact information'], 400);
     }
 
-    // ✅ Check if already revealed
-    $hasRevealed = $candidate->employerview()
+    // Check if already revealed (we only charge once)
+    $existing = $candidate->employerview()
         ->where('employer_id', $employer->id)
-        ->where('number_revealed', true)
-        ->exists();
+        ->first();
 
-    if ($hasRevealed) {
+    $alreadyRevealed = $existing?->pivot->number_revealed ?? false;
+
+    if ($alreadyRevealed) {
         return response()->json([
-            'message' => 'Number already revealed',
-            'number' => $candidate->number
-        ]);
-    }
-
-    try {
-        // ✅ Deduct from DATABASE credits, not job post credits
-        $minimumCreditsRequired = 1;
-        if (!$employer->hasEnoughCredits($minimumCreditsRequired, 'database')) {
-            return response()->json([
-                'error' => 'Insufficient database credits',
-                'current_database_credits' => $employer->database_credits,
-            ], 403);
-        }
-
-        // Deduct 1 database credit
-        $employer->deductCredits(1, 'database');
-
-        // Save employer-candidate relation
-        $candidate->employerview()->syncWithoutDetaching([
-            $employer->id => [
-                'number_revealed' => true,
-                'revealed_at' => now()
-            ]
-        ]);
-
-        return response()->json([
-            'message' => 'Number revealed successfully',
+            'message' => 'Contact already revealed',
             'number' => $candidate->number,
+            'email'  => $candidate->email,
             'remaining_database_credits' => $employer->database_credits,
         ]);
-
-    } catch (\Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 400);
     }
-}
 
+    // Deduct credit only ONCE
+    $minimumCreditsRequired = 1;
+    if (!$employer->hasEnoughCredits($minimumCreditsRequired, 'database')) {
+        return response()->json([
+            'error' => 'Insufficient database credits',
+            'current_database_credits' => $employer->database_credits,
+        ], 403);
+    }
+
+    // Deduct 1 credit
+    $employer->deductCredits(1, 'database');
+
+    // Reveal BOTH number and email by setting number_revealed = true
+    $candidate->employerview()->syncWithoutDetaching([
+        $employer->id => [
+            'number_revealed' => true,
+            'revealed_at'     => now(),
+        ]
+    ]);
+
+    return response()->json([
+        'message'                    => 'Contact revealed successfully (Phone + Email)',
+        'number'                     => $candidate->number,
+        'email'                      => $candidate->email,
+        'remaining_database_credits' => $employer->fresh()->database_credits, // fresh() to get updated value
+    ]);
+}
   
    
 }

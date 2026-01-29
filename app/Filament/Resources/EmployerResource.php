@@ -15,7 +15,8 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Textarea;
-
+use Filament\Notifications\Notification;
+use Filament\Tables\Actions\DeleteAction;
 class EmployerResource extends Resource
 {
     protected static ?string $model = Employer::class;
@@ -99,10 +100,59 @@ class EmployerResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                DeleteAction::make()
+                ->before(function ($record, DeleteAction $action) {
+
+                    // Check relations
+                    if ($record->jobPostings()->count() > 0) {
+                        Notification::make()
+                            ->danger()
+                            ->title('Cannot delete Employer')
+                            ->body('This employer has job postings. Please delete them first.')
+                            ->send();
+
+                        $action->cancel();
+                    }
+
+                    if ($record->companies()->count() > 0) {
+                        Notification::make()
+                            ->danger()
+                            ->title('Cannot delete Employer')
+                            ->body('This employer has companies linked. Delete them first.')
+                            ->send();
+
+                        $action->cancel();
+                    }
+
+                    if ($record->creditTransactions()->count() > 0) {
+                        Notification::make()
+                            ->danger()
+                            ->title('Cannot delete Employer')
+                            ->body('This employer has credit transactions. Delete them first.')
+                            ->send();
+
+                        $action->cancel();
+                    }
+                }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                  Tables\Actions\DeleteBulkAction::make()
+                    ->before(function ($records, $action) {
+
+                        foreach ($records as $record) {
+                            if ($record->jobPostings()->count() > 0) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Cannot delete selected employers')
+                                    ->body('One or more employers still have job postings.')
+                                    ->send();
+
+                                $action->cancel();
+                                return;
+                            }
+                        }
+                    }),
                 ]),
             ]);
     }

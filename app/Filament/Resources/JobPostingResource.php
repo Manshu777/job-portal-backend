@@ -20,8 +20,8 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
-
-
+use Filament\Tables\Columns\IconColumn;
+// IconColumn
 class JobPostingResource extends Resource
 {
     protected static ?string $model = JobPosting::class;
@@ -267,6 +267,14 @@ class JobPostingResource extends Resource
         return $table
             ->defaultSort('id', 'desc')
             ->columns([
+                  IconColumn::make('joining_fee')
+    ->label('Joining Fee')
+    ->boolean() // Treat 0/1 as boolean
+   ->trueIcon('heroicon-o-exclamation-triangle') 
+    ->falseIcon('heroicon-o-check-circle')
+    ->trueColor('danger')  
+    ->falseColor('success'), 
+
                 ToggleColumn::make('is_verified')
                     ->label('Verified')
                     ->sortable()
@@ -275,8 +283,11 @@ class JobPostingResource extends Resource
                     ->afterStateUpdated(function ($record, $state) {
                         // Add any logic for verification updates
                     }),
-                TextColumn::make('employer.company_name')
+                TextColumn::make('employer.name')
                     ->label('Employer')
+                    ->sortable(),
+                TextColumn::make('company.name')
+                    ->label('Company Name')
                     ->sortable(),
                 TextColumn::make('job_title')
                     ->searchable()
@@ -300,15 +311,15 @@ class JobPostingResource extends Resource
                     ->label('Incentive')
                     ->money('INR')
                     ->sortable(),
-                TextColumn::make('industry')
-                    ->sortable()
-                    ->searchable(),
-                TextColumn::make('department')
-                    ->sortable()
-                    ->searchable(),
-                TextColumn::make('job_role')
-                    ->sortable()
-                    ->searchable(),
+                // TextColumn::make('industry')
+                //     ->sortable()
+                //     ->searchable(),
+                // TextColumn::make('department')
+                //     ->sortable()
+                //     ->searchable(),
+                // TextColumn::make('job_role')
+                //     ->sortable()
+                //     ->searchable(),
                 TextColumn::make('job_expire_time')
                     ->label('Expiry Days')
                     ->sortable(),
